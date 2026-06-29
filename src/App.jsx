@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 
-const TODAY = '2026-06-22';
+const TODAY = '2026-06-29';
 
 const DEFAULT_PROVIDERS = [
   { id: 'wu',        name: 'Western Union',  flatFee: 0,    percentFee: 0,   fxMarkup: 2.9, cash: true,  bank: true,  mobile: false, speed: 'Minutes (cash) · 1–2 days (bank)', lastUpdated: '2026-06-22' },
@@ -305,9 +305,9 @@ export default function RemittanceLedger() {
 
         .stamp {
           position: absolute;
-          top: 50%;
-          right: 14px;
-          transform: translateY(-50%) rotate(-9deg);
+          top: -8px;
+          right: 8px;
+          transform: rotate(-9deg);
           border: 2px solid var(--stamp);
           color: var(--stamp);
           font-family: 'IBM Plex Mono', monospace;
@@ -318,7 +318,7 @@ export default function RemittanceLedger() {
           border-radius: 4px;
           pointer-events: none;
           mix-blend-mode: multiply;
-          background: rgba(255,255,255,0.4);
+          background: var(--paper);
           display: none;
         }
         @media (min-width: 520px) {
@@ -410,6 +410,31 @@ export default function RemittanceLedger() {
           margin-top: 16px;
           border-top: 1px solid var(--rule);
           padding-top: 12px;
+        }
+
+        .feedback-row {
+          margin-top: 14px;
+          padding-top: 12px;
+          border-top: 1px solid var(--rule);
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          color: var(--ink-light);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .feedback-link {
+          color: var(--teal);
+          text-decoration: none;
+          border-bottom: 1px dotted var(--teal);
+          padding-bottom: 1px;
+          font-weight: 500;
+        }
+        .feedback-link:hover {
+          color: var(--stamp);
+          border-bottom-color: var(--stamp);
         }
       `}</style>
 
@@ -531,6 +556,18 @@ export default function RemittanceLedger() {
           before sending. Edit the assumptions above as you research real rates for your corridor
           and amount.
         </p>
+
+        <div className="feedback-row">
+          <span>Spotted something off, or want a feature?</span>
+          <a
+            className="feedback-link"
+            href="https://forms.gle/LHbTy2PEEWL2Utdc7"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Send feedback →
+          </a>
+        </div>
       </div>
     </div>
   );
