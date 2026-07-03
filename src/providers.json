@@ -1,0 +1,12 @@
+{
+  "providers": [
+    { "id": "wu",       "name": "Western Union", "flatFee": 0,    "percentFee": 0,    "fxMarkup": 2.9, "cash": true,  "bank": true,  "mobile": false, "speed": "Minutes (cash) · 1–2 days (bank)",        "lastUpdated": "2026-06-22" },
+    { "id": "mg",       "name": "MoneyGram",     "flatFee": 0,    "percentFee": 1.2,  "fxMarkup": 2.2, "cash": true,  "bank": true,  "mobile": false, "speed": "Minutes (cash) · 1–3 days (bank)",        "lastUpdated": "2026-06-22" },
+    { "id": "wise",     "name": "Wise",          "flatFee": 1.50, "percentFee": 0.75, "fxMarkup": 0,   "cash": false, "bank": true,  "mobile": false, "speed": "1–2 days",                                 "lastUpdated": "2026-06-22" },
+    { "id": "remitly",  "name": "Remitly",       "flatFee": 2.99, "percentFee": 0,    "fxMarkup": 2.3, "cash": true,  "bank": true,  "mobile": true,  "speed": "Minutes (express) · 3–5 days (economy)",  "lastUpdated": "2026-06-22" },
+    { "id": "worldrem", "name": "WorldRemit",    "flatFee": 1.99, "percentFee": 0,    "fxMarkup": 2.5, "cash": true,  "bank": true,  "mobile": true,  "speed": "Minutes",                                  "lastUpdated": "2026-06-22" },
+    { "id": "sendwave", "name": "Sendwave",      "flatFee": 0,    "percentFee": 0,    "fxMarkup": 1.5, "cash": false, "bank": false, "mobile": true,  "speed": "Minutes · mobile money only",              "lastUpdated": "2026-06-22" },
+    { "id": "lemfi",    "name": "LemFi",         "flatFee": 0,    "percentFee": 0,    "fxMarkup": 1.0, "cash": false, "bank": true,  "mobile": true,  "speed": "Minutes – hours",                          "lastUpdated": "2026-06-22" },
+    { "id": "nala",     "name": "NALA",          "flatFee": 0.99, "percentFee": 0,    "fxMarkup": 1.5, "cash": false, "bank": true,  "mobile": true,  "speed": "Minutes (mobile) · 4–5 hrs bank window",   "lastUpdated": "2026-06-22" }
+  ]
+}

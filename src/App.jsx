@@ -1,23 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import providerData from './providers.json';
 
 const TODAY = '2026-06-22';
+const FALLBACK_MID_RATE = 3645;
 
-const DEFAULT_PROVIDERS = [
-  { id: 'wu',        name: 'Western Union',  flatFee: 0,    percentFee: 0,   fxMarkup: 2.9, cash: true,  bank: true,  mobile: false, speed: 'Minutes (cash) · 1–2 days (bank)', lastUpdated: '2026-06-22' },
-  { id: 'mg',        name: 'MoneyGram',      flatFee: 0,    percentFee: 1.2, fxMarkup: 2.2, cash: true,  bank: true,  mobile: false, speed: 'Minutes (cash) · 1–3 days (bank)', lastUpdated: '2026-06-22' },
-  { id: 'wise',      name: 'Wise',           flatFee: 17.74,percentFee: 0,   fxMarkup: 0,   cash: false, bank: true,  mobile: false, speed: '1–2 days', lastUpdated: '2026-06-22' },
-  { id: 'remitly',   name: 'Remitly',        flatFee: 2.99, percentFee: 0,   fxMarkup: 2.3, cash: true,  bank: true,  mobile: true,  speed: 'Minutes (express) · 3–5 days (economy)', lastUpdated: '2026-06-22' },
-  { id: 'worldrem',  name: 'WorldRemit',     flatFee: 1.99, percentFee: 0,   fxMarkup: 2.5, cash: true,  bank: true,  mobile: true,  speed: 'Minutes', lastUpdated: '2026-06-22' },
-  { id: 'sendwave',  name: 'Sendwave',       flatFee: 0,    percentFee: 0,   fxMarkup: 1.5, cash: false, bank: false, mobile: true,  speed: 'Minutes · mobile money only', lastUpdated: '2026-06-22' },
-  { id: 'lemfi',     name: 'LemFi',          flatFee: 0,    percentFee: 0,   fxMarkup: 1.0, cash: false, bank: true,  mobile: true,  speed: 'Minutes – hours', lastUpdated: '2026-06-22' },
-  { id: 'nala',      name: 'NALA',           flatFee: 0.99, percentFee: 0,   fxMarkup: 1.5, cash: false, bank: true,  mobile: true,  speed: 'Minutes (mobile) · 4–5 hrs bank window', lastUpdated: '2026-06-22' },
-];
+const DEFAULT_PROVIDERS = providerData.providers;
 
 const PRESETS = [50, 100, 200, 500, 1000];
 
 function formatUpdated(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function formatVerified(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const METHODS = [
@@ -36,13 +34,36 @@ function fmtUGX(n) {
 export default function RemittanceLedger() {
   const [amount, setAmount] = useState(500);
   const [method, setMethod] = useState('mobile');
-  const [midRate, setMidRate] = useState(3645);
+  const [midRate, setMidRate] = useState(FALLBACK_MID_RATE);
+  // 'checking' while we fetch, 'live' if the API answered, 'fallback' if it
+  // didn't, 'manual' once the user edits the rate themselves.
+  const [rateSource, setRateSource] = useState('checking');
   const [providers, setProviders] = useState(DEFAULT_PROVIDERS);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const SHARE_URL = 'https://remittance-ledger.vercel.app';
   const SHARE_TEXT = 'Compare US → Uganda money transfer services after fees:';
+
+  // Fetch the live USD→UGX mid-market rate once on load. Free endpoint, no
+  // key. If it fails for any reason we quietly keep the fallback constant.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return;
+        const ugx = d?.rates?.UGX;
+        if (typeof ugx === 'number' && ugx > 0) {
+          setMidRate(Math.round(ugx));
+          setRateSource('live');
+        } else {
+          setRateSource('fallback');
+        }
+      })
+      .catch(() => { if (!cancelled) setRateSource('fallback'); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleCopy = async () => {
     try {
@@ -55,6 +76,15 @@ export default function RemittanceLedger() {
   const updateProvider = (id, field, value) => {
     setProviders(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
+
+  // Oldest "lastUpdated" across providers = the honest freshness claim for
+  // the dataset as a whole.
+  const dataVerified = useMemo(() => {
+    return providers.reduce(
+      (oldest, p) => (p.lastUpdated < oldest ? p.lastUpdated : oldest),
+      providers[0]?.lastUpdated ?? TODAY,
+    );
+  }, [providers]);
 
   const rows = useMemo(() => {
     const amt = Number(amount) || 0;
@@ -76,6 +106,12 @@ export default function RemittanceLedger() {
   }, [providers, amount, method, midRate]);
 
   const bestId = rows.find(r => r.available)?.id;
+
+  const rateLabel =
+    rateSource === 'live'     ? 'Live mid-market rate: 1 USD ='
+  : rateSource === 'manual'   ? 'Your mid-market rate: 1 USD ='
+  : rateSource === 'checking' ? 'Mid-market rate (updating…): 1 USD ='
+  :                             'Mid-market rate (offline estimate): 1 USD =';
 
   return (
     <div className="ledger-root">
@@ -204,6 +240,15 @@ export default function RemittanceLedger() {
           display: flex;
           align-items: center;
           gap: 6px;
+          flex-wrap: wrap;
+        }
+        .rate-live-dot {
+          display: inline-block;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #3F7D4E;
+          margin-right: 2px;
         }
         .rate-input {
           font-family: 'IBM Plex Mono', monospace;
@@ -213,6 +258,23 @@ export default function RemittanceLedger() {
           border-bottom: 1px dotted var(--ink-light);
           background: transparent;
           color: var(--ink);
+        }
+
+        .verified-line {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          color: var(--ink-light);
+          margin-top: 6px;
+        }
+        .verified-line button {
+          font-family: inherit;
+          font-size: inherit;
+          color: var(--teal);
+          background: none;
+          border: none;
+          border-bottom: 1px dotted var(--teal);
+          padding: 0;
+          cursor: pointer;
         }
 
         .method-row {
@@ -549,15 +611,24 @@ export default function RemittanceLedger() {
         </div>
 
         <div className="rate-line">
-          Mid-market rate used: 1 USD =
+          {rateSource === 'live' && <span className="rate-live-dot" aria-hidden="true" />}
+          {rateLabel}
           <input
             className="rate-input"
             type="number"
             value={midRate}
-            onChange={e => setMidRate(Number(e.target.value) || 0)}
+            onChange={e => {
+              setMidRate(Number(e.target.value) || 0);
+              setRateSource('manual');
+            }}
           />
           UGX
         </div>
+
+        <p className="verified-line">
+          Provider fees verified {formatVerified(dataVerified)} ·{' '}
+          <button onClick={() => setEditing(true)}>adjust assumptions</button> if stale
+        </p>
 
         <div className="method-row">
           {METHODS.map(m => (
@@ -598,7 +669,7 @@ export default function RemittanceLedger() {
                 Not offered for {METHODS.find(m => m.key === method).label.toLowerCase()}
               </span>
             )}
-            {r.id === bestId && r.available && <span className="stamp">Best today</span>}
+            {r.id === bestId && r.available && <span className="stamp">Best estimate</span>}
           </div>
         ))}
       </div>
@@ -628,9 +699,10 @@ export default function RemittanceLedger() {
         <p className="disclaimer">
           Figures are rough planning estimates, not live quotes — actual fees, FX margins, and
           available payout methods change often and vary by amount, state, and promotions.
-          Always confirm the final "recipient gets" number on the provider's own site or app
-          before sending. Edit the assumptions above as you research real rates for your corridor
-          and amount.
+          Estimates assume bank-funded transfers; paying by debit or credit card usually
+          costs more. Always confirm the final "recipient gets" number on the provider's own
+          site or app before sending. Edit the assumptions above as you research real rates
+          for your corridor and amount.
         </p>
 
         <div className="feedback-row">
