@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 
-const TODAY = '2026-06-29';
+const TODAY = '2026-06-22';
 
 const DEFAULT_PROVIDERS = [
   { id: 'wu',        name: 'Western Union',  flatFee: 0,    percentFee: 0,   fxMarkup: 2.9, cash: true,  bank: true,  mobile: false, speed: 'Minutes (cash) · 1–2 days (bank)', lastUpdated: '2026-06-22' },
@@ -39,6 +39,18 @@ export default function RemittanceLedger() {
   const [midRate, setMidRate] = useState(3645);
   const [providers, setProviders] = useState(DEFAULT_PROVIDERS);
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const SHARE_URL = 'https://remittance-ledger.vercel.app';
+  const SHARE_TEXT = 'Compare US → Uganda money transfer services after fees:';
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(SHARE_URL);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
 
   const updateProvider = (id, field, value) => {
     setProviders(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
@@ -436,6 +448,66 @@ export default function RemittanceLedger() {
           color: var(--stamp);
           border-bottom-color: var(--stamp);
         }
+
+        .corridor-note {
+          margin-top: 14px;
+          padding: 10px 12px;
+          background: var(--paper-deep);
+          border: 1px dashed var(--rule);
+          border-radius: 3px;
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          color: var(--ink-light);
+          line-height: 1.5;
+        }
+        .corridor-note strong {
+          color: var(--ink);
+          font-weight: 600;
+        }
+        .corridor-note a {
+          color: var(--teal);
+          text-decoration: none;
+          border-bottom: 1px dotted var(--teal);
+        }
+
+        .share-row {
+          margin-top: 14px;
+          padding-top: 12px;
+          border-top: 1px solid var(--rule);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .share-label {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          color: var(--ink-light);
+          letter-spacing: 0.04em;
+        }
+        .share-btn {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          padding: 5px 12px;
+          border: 1px solid var(--rule);
+          border-radius: 14px;
+          background: transparent;
+          color: var(--ink);
+          cursor: pointer;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          transition: all 0.15s ease;
+        }
+        .share-btn:hover {
+          border-color: var(--ink);
+          background: var(--paper-deep);
+        }
+        .share-btn.copied {
+          border-color: var(--teal);
+          color: var(--teal);
+        }
       `}</style>
 
       <div className="ledger-header">
@@ -445,7 +517,11 @@ export default function RemittanceLedger() {
       </div>
 
       <div className="ledger-body">
-        <div className="amount-row">
+        <div className="corridor-note">
+          <strong>Sending from outside the US?</strong> Currently only US → Uganda. Uganda → US is next, and UK/UAE/other corridors are on the radar based on early traffic. <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">Let me know your corridor</a> — it shapes what I build next.
+        </div>
+
+        <div className="amount-row" style={{ marginTop: '18px' }}>
           <span className="amount-label">Send</span>
           <div className="amount-input-wrap">
             <span className="amount-prefix">$</span>
@@ -567,6 +643,32 @@ export default function RemittanceLedger() {
           >
             Send feedback →
           </a>
+        </div>
+
+        <div className="share-row">
+          <span className="share-label">Know someone this could help?</span>
+          <a
+            className="share-btn"
+            href={`https://wa.me/?text=${encodeURIComponent(SHARE_TEXT + ' ' + SHARE_URL)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            WhatsApp
+          </a>
+          <a
+            className="share-btn"
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_TEXT)}&url=${encodeURIComponent(SHARE_URL)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            X / Twitter
+          </a>
+          <button
+            className={'share-btn' + (copied ? ' copied' : '')}
+            onClick={handleCopy}
+          >
+            {copied ? '✓ Copied' : 'Copy link'}
+          </button>
         </div>
       </div>
     </div>
