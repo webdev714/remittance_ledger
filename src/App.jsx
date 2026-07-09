@@ -426,6 +426,7 @@ export default function RemittanceLedger() {
 
         .edit-panel {
           margin-top: 16px;
+          overflow-x: auto;
           border: 1px solid var(--rule);
           border-radius: 4px;
           background: var(--paper-deep);
@@ -439,6 +440,7 @@ export default function RemittanceLedger() {
         }
         .edit-grid {
           display: grid;
+          min-width: 520px;
           grid-template-columns: 1fr 70px 70px 70px 1fr 90px;
           gap: 8px;
           align-items: center;
