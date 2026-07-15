@@ -7,6 +7,11 @@ const FALLBACK_MID_RATE = 3645;
 const DEFAULT_PROVIDERS = providerData.providers;
 
 const PRESETS = [50, 100, 200, 500, 1000];
+const UGX_PRESETS = [500000, 1000000, 2000000, 3500000, 5000000];
+
+function fmtUGXShort(n) {
+  return n >= 1000000 ? (n / 1000000) + 'M' : (n / 1000) + 'K';
+}
 
 function formatUpdated(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -33,6 +38,8 @@ function fmtUGX(n) {
 
 export default function RemittanceLedger() {
   const [amount, setAmount] = useState(500);
+  const [mode, setMode] = useState('send'); // 'send' | 'receive'
+  const [targetUGX, setTargetUGX] = useState(2000000);
   const [method, setMethod] = useState('mobile');
   const [midRate, setMidRate] = useState(FALLBACK_MID_RATE);
   // 'checking' while we fetch, 'live' if the API answered, 'fallback' if it
@@ -97,13 +104,25 @@ export default function RemittanceLedger() {
         const recipientUGX = netUSD * effectiveRate;
         const usdEquivalent = midRate > 0 ? recipientUGX / midRate : 0;
         const percentLost = amt > 0 ? ((amt - usdEquivalent) / amt) * 100 : 0;
-        return { ...p, available, totalFeeUSD, recipientUGX, effectiveRate, percentLost };
+        // Inverse: what USD must be sent so the recipient gets targetUGX?
+        const tgt = Number(targetUGX) || 0;
+        const pct = p.percentFee / 100;
+        const usdNeeded = effectiveRate > 0 && pct < 1
+          ? (tgt / effectiveRate + p.flatFee) / (1 - pct)
+          : Infinity;
+        const feeReceive = usdNeeded === Infinity ? 0 : p.flatFee + usdNeeded * pct;
+        const percentLostReceive = usdNeeded > 0 && usdNeeded !== Infinity && midRate > 0
+          ? ((usdNeeded - tgt / midRate) / usdNeeded) * 100
+          : 0;
+        return { ...p, available, totalFeeUSD, recipientUGX, effectiveRate, percentLost, usdNeeded, feeReceive, percentLostReceive };
       })
       .sort((a, b) => {
         if (a.available !== b.available) return a.available ? -1 : 1;
-        return b.recipientUGX - a.recipientUGX;
+        return mode === 'send'
+          ? b.recipientUGX - a.recipientUGX
+          : a.usdNeeded - b.usdNeeded;
       });
-  }, [providers, amount, method, midRate]);
+  }, [providers, amount, method, midRate, mode, targetUGX]);
 
   const bestId = rows.find(r => r.available)?.id;
 
@@ -577,7 +596,7 @@ export default function RemittanceLedger() {
       <div className="ledger-header">
         <p className="ledger-eyebrow">Corridor 01 · United States → Uganda</p>
         <h1 className="ledger-title">Remittance Ledger</h1>
-        <p className="ledger-sub">Estimate what arrives, before you send</p>
+        <p className="ledger-sub">{mode === 'send' ? 'Estimate what arrives, before you send' : 'Estimate what to send, from what they need'}</p>
       </div>
 
       <div className="ledger-body">
@@ -585,31 +604,74 @@ export default function RemittanceLedger() {
           <strong>Sending from outside the US?</strong> Currently only US → Uganda. Uganda → US is next, and UK/UAE/other corridors are on the radar based on early traffic. <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">Let me know your corridor</a> — it shapes what I build next.
         </div>
 
-        <div className="amount-row" style={{ marginTop: '18px' }}>
-          <span className="amount-label">Send</span>
-          <div className="amount-input-wrap">
-            <span className="amount-prefix">$</span>
-            <input
-              className="amount-input"
-              type="number"
-              min="0"
-              value={amount}
-              onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
-            />
-          </div>
-          <span className="amount-label">from the US to Uganda</span>
+        <div className="method-row" style={{ marginTop: '18px', marginBottom: '4px' }}>
+          <button
+            className={'method-btn' + (mode === 'send' ? ' active' : '')}
+            onClick={() => setMode('send')}
+          >
+            I'm sending
+          </button>
+          <button
+            className={'method-btn' + (mode === 'receive' ? ' active' : '')}
+            onClick={() => setMode('receive')}
+          >
+            They need
+          </button>
         </div>
 
+        {mode === 'send' ? (
+          <div className="amount-row" style={{ marginTop: '14px' }}>
+            <span className="amount-label">Send</span>
+            <div className="amount-input-wrap">
+              <span className="amount-prefix">$</span>
+              <input
+                className="amount-input"
+                type="number"
+                min="0"
+                value={amount}
+                onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+            </div>
+            <span className="amount-label">from the US to Uganda</span>
+          </div>
+        ) : (
+          <div className="amount-row" style={{ marginTop: '14px' }}>
+            <span className="amount-label">They need</span>
+            <div className="amount-input-wrap">
+              <input
+                className="amount-input"
+                type="number"
+                min="0"
+                style={{ width: '190px' }}
+                value={targetUGX}
+                onChange={e => setTargetUGX(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <span className="amount-prefix" style={{ fontSize: '20px', marginLeft: '6px', marginRight: 0 }}>UGX</span>
+            </div>
+            <span className="amount-label">in Uganda</span>
+          </div>
+        )}
+
         <div className="preset-row">
-          {PRESETS.map(p => (
-            <button
-              key={p}
-              className={'preset-btn' + (Number(amount) === p ? ' active' : '')}
-              onClick={() => setAmount(p)}
-            >
-              ${p}
-            </button>
-          ))}
+          {mode === 'send'
+            ? PRESETS.map(p => (
+                <button
+                  key={p}
+                  className={'preset-btn' + (Number(amount) === p ? ' active' : '')}
+                  onClick={() => setAmount(p)}
+                >
+                  ${p}
+                </button>
+              ))
+            : UGX_PRESETS.map(p => (
+                <button
+                  key={p}
+                  className={'preset-btn' + (Number(targetUGX) === p ? ' active' : '')}
+                  onClick={() => setTargetUGX(p)}
+                >
+                  {fmtUGXShort(p)}
+                </button>
+              ))}
         </div>
 
         <div className="rate-line">
@@ -661,10 +723,12 @@ export default function RemittanceLedger() {
             {r.available ? (
               <>
                 <span className="row-fee">
-                  fee {fmtUSD(r.totalFeeUSD)}<br />
-                  {r.percentLost.toFixed(1)}% lost
+                  fee {fmtUSD(mode === 'send' ? r.totalFeeUSD : r.feeReceive)}<br />
+                  {(mode === 'send' ? r.percentLost : r.percentLostReceive).toFixed(1)}% lost
                 </span>
-                <span className="row-amount">{fmtUGX(r.recipientUGX)}</span>
+                <span className="row-amount">
+                  {mode === 'send' ? fmtUGX(r.recipientUGX) : fmtUSD(r.usdNeeded)}
+                </span>
               </>
             ) : (
               <span className="unavailable-tag" style={{ gridColumn: '3 / span 2' }}>
