@@ -38,6 +38,7 @@ function fmtUGX(n) {
 
 export default function RemittanceLedger() {
   const [amount, setAmount] = useState(500);
+  const [corridor, setCorridor] = useState('c1'); // 'c1' US→UG calculator | 'c2' UG→US research
   const [mode, setMode] = useState('send'); // 'send' | 'receive'
   const [targetUGX, setTargetUGX] = useState(2000000);
   const [method, setMethod] = useState('mobile');
@@ -591,14 +592,131 @@ export default function RemittanceLedger() {
           border-color: var(--teal);
           color: var(--teal);
         }
+
+        .corridor-tabs {
+          display: flex;
+          background: var(--teal);
+          padding: 0 28px;
+          gap: 0;
+        }
+        .corridor-tab {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          padding: 10px 14px 12px;
+          background: transparent;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: rgba(246,241,231,0.55);
+          cursor: pointer;
+        }
+        .corridor-tab.active {
+          color: var(--gold);
+          border-bottom-color: var(--gold);
+        }
+
+        .research-wrap { padding: 20px 28px 8px; }
+        .research-headline {
+          font-family: 'Fraunces', serif;
+          font-size: 19px;
+          font-weight: 600;
+          line-height: 1.4;
+          margin: 0 0 6px;
+        }
+        .research-sub {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11.5px;
+          color: var(--ink-light);
+          line-height: 1.6;
+          margin: 0 0 18px;
+        }
+        .rail-row {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 11px 4px;
+          border-bottom: 1px solid var(--rule);
+          flex-wrap: wrap;
+        }
+        .rail-name {
+          font-family: 'Fraunces', serif;
+          font-size: 15px;
+          font-weight: 600;
+          margin: 0;
+        }
+        .rail-note {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 10.5px;
+          color: var(--ink-light);
+          margin: 2px 0 0;
+          width: 100%;
+          line-height: 1.5;
+        }
+        .rail-status {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 9px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          padding: 3px 8px;
+          border-radius: 3px;
+          border: 1.5px solid;
+          white-space: nowrap;
+        }
+        .st-agent   { color: var(--teal);  border-color: var(--teal); }
+        .st-dead    { color: var(--stamp); border-color: var(--stamp); }
+        .st-dormant { color: var(--gold);  border-color: var(--gold); }
+        .quote-card {
+          background: var(--good-bg);
+          border: 1px solid var(--rule);
+          border-radius: 4px;
+          padding: 12px 14px;
+          margin: 14px 0 0;
+        }
+        .quote-title {
+          font-family: 'Fraunces', serif;
+          font-size: 15px;
+          font-weight: 700;
+          margin: 0 0 6px;
+        }
+        .quote-line {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11.5px;
+          line-height: 1.7;
+          margin: 0;
+        }
+        .quote-loss { color: var(--stamp); font-weight: 600; }
+        .research-section-title {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--ink-light);
+          margin: 22px 0 4px;
+        }
       `}</style>
 
       <div className="ledger-header">
-        <p className="ledger-eyebrow">Corridor 01 · United States → Uganda</p>
+        <p className="ledger-eyebrow">{corridor === 'c1' ? 'Corridor 01 · United States → Uganda' : 'Corridor 02 · Uganda → United States'}</p>
         <h1 className="ledger-title">Remittance Ledger</h1>
-        <p className="ledger-sub">{mode === 'send' ? 'Estimate what arrives, before you send' : 'Estimate what to send, from what they need'}</p>
+        <p className="ledger-sub">
+          {corridor === 'c1'
+            ? (mode === 'send' ? 'Estimate what arrives, before you send' : 'Estimate what to send, from what they need')
+            : 'Field research from Kampala · what actually exists'}
+        </p>
       </div>
 
+      <div className="corridor-tabs">
+        <button className={'corridor-tab' + (corridor === 'c1' ? ' active' : '')} onClick={() => setCorridor('c1')}>
+          US → Uganda
+        </button>
+        <button className={'corridor-tab' + (corridor === 'c2' ? ' active' : '')} onClick={() => setCorridor('c2')}>
+          Uganda → US
+        </button>
+      </div>
+
+      {corridor === 'c1' && (<>
       <div className="ledger-body">
         <div className="corridor-note">
           <strong>Sending from outside the US?</strong> Currently only US → Uganda. Uganda → US is next, and UK/UAE/other corridors are on the radar based on early traffic. <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">Let me know your corridor</a> — it shapes what I build next.
@@ -739,13 +857,89 @@ export default function RemittanceLedger() {
           </div>
         ))}
       </div>
+      </>)}
+
+      {corridor === 'c2' && (
+        <div className="research-wrap">
+          <p className="research-headline">
+            There is currently no app or website that lets you send money from Uganda to the USA.
+          </p>
+          <p className="research-sub">
+            Every digital rail either omits the US, is switched off, or blocks Ugandan registration.
+            The only working options are physical agent counters. Field-verified in Kampala, July 2026.
+          </p>
+
+          <p className="research-section-title">The rails, checked one by one</p>
+
+          <div className="rail-row">
+            <p className="rail-name">MTN MoMo</p>
+            <span className="rail-status st-dead">US absent</span>
+            <p className="rail-note">Outbound reaches 22 countries by bank (UK, Canada, UAE, India…) plus wallets & AliPay/WeChat — the US is not on any list. Verified via *165#, Jul 2026.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Airtel Money</p>
+            <span className="rail-status st-dormant">Built, not live</span>
+            <p className="rail-note">USA appears in the Rest-of-World menu — tapping it returns "service not live." The rail is constructed but switched off. Verified via *185#, Jul 2026.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Ria (app)</p>
+            <span className="rail-status st-dead">Geo-blocked</span>
+            <p className="rail-note">"Based on current location, we can only register an account to send money from this country." No Ugandan self-serve registration. Agent counters only.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">WorldRemit</p>
+            <span className="rail-status st-dead">Exited 2022</span>
+            <p className="rail-note">Ceased all outbound services from Uganda in June 2022. Receiving still works; sending out does not.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Western Union · MoneyGram · Ria</p>
+            <span className="rail-status st-agent">Agent only</span>
+            <p className="rail-note">Working Uganda → US transfers exist — but only by walking to a forex bureau / agent with cash and national ID, plus stating purpose & source of funds. US payout: cash pickup or bank deposit.</p>
+          </div>
+
+          <p className="research-section-title">Real quotes · 2,000,000 UGX to the US · Kampala agent desk, Jul 2026</p>
+
+          <div className="quote-card">
+            <p className="quote-title">MoneyGram — $515 arrives</p>
+            <p className="quote-line">Fee 19,773 UGX · rate 3,846 · <span className="quote-loss">≈ 5.4% lost</span> vs mid-market (~$544 at 3,674)</p>
+          </div>
+          <div className="quote-card">
+            <p className="quote-title">Western Union — $510 arrives</p>
+            <p className="quote-line">Fee 22,738 UGX · rate 3,759 · <span className="quote-loss">≈ 6.3% lost</span> vs mid-market</p>
+          </div>
+
+          <p className="research-sub" style={{ marginTop: '16px' }}>
+            For comparison: sending the other direction (US → Uganda) costs ~1–1.5% with the best apps.
+            Sending out of Uganda costs 4–5× more — and requires a physical trip.
+          </p>
+
+          <p className="research-section-title">Still under investigation</p>
+          <p className="research-sub">
+            Bank SWIFT wires (DTB quote pending) · Wendi wallet + WU (Pearl Bank) · informal & P2P routes.
+            Agent quotes are point-in-time and vary by bureau — treat as a snapshot, not live pricing.
+          </p>
+
+          <p className="research-sub">
+            <strong style={{ color: 'var(--ink)' }}>In Uganda? Help map this.</strong> Got a quote from your own bureau or bank?{' '}
+            <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>
+              Send it in
+            </a> — every real quote makes the map sharper.
+          </p>
+        </div>
+      )}
 
       <div className="footer">
-        <button className="edit-toggle" onClick={() => setEditing(e => !e)}>
-          {editing ? 'Hide rate assumptions' : 'Adjust rate assumptions'}
-        </button>
+        {corridor === 'c1' && (
+          <button className="edit-toggle" onClick={() => setEditing(e => !e)}>
+            {editing ? 'Hide rate assumptions' : 'Adjust rate assumptions'}
+          </button>
+        )}
 
-        {editing && (
+        {corridor === 'c1' && editing && (
           <div className="edit-panel">
             <p className="edit-panel-title">Provider assumptions</p>
             <div className="edit-grid">
