@@ -9,6 +9,16 @@ const DEFAULT_PROVIDERS = providerData.providers;
 const PRESETS = [50, 100, 200, 500, 1000];
 const UGX_PRESETS = [500000, 1000000, 2000000, 3500000, 5000000];
 
+// Uganda → US routes. effRate = UGX actually surrendered per USD delivered,
+// derived from real field quotes (fees + FX bundled). Verified Kampala, Jul 2026.
+const OUT_ROUTES = [
+  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal', note: 'Binance P2P order book · scam risk, murky rules' },
+  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital',  note: 'In-app · US bank or free Chipper tag' },
+  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital',  note: 'In-app · US bank · no fee' },
+  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter',  note: 'Agent desk · national ID + purpose of funds' },
+  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter',  note: 'Agent desk · national ID + purpose of funds' },
+];
+
 function fmtUGXShort(n) {
   return n >= 1000000 ? (n / 1000000) + 'M' : (n / 1000) + 'K';
 }
@@ -41,6 +51,7 @@ export default function RemittanceLedger() {
   const [corridor, setCorridor] = useState('c1'); // 'c1' US→UG calculator | 'c2' UG→US research
   const [mode, setMode] = useState('send'); // 'send' | 'receive'
   const [targetUGX, setTargetUGX] = useState(2000000);
+  const [outUGX, setOutUGX] = useState(2000000);
   const [method, setMethod] = useState('mobile');
   const [midRate, setMidRate] = useState(FALLBACK_MID_RATE);
   // 'checking' while we fetch, 'live' if the API answered, 'fallback' if it
@@ -695,6 +706,31 @@ export default function RemittanceLedger() {
           color: var(--ink-light);
           margin: 22px 0 4px;
         }
+
+        .st-works { color: #2E6B2E; border-color: #2E6B2E; background: var(--good-bg); }
+
+        .out-calc { margin: 4px 0 22px; }
+        .out-row {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          align-items: center;
+          gap: 10px;
+          padding: 11px 8px;
+          border-bottom: 1px solid var(--rule);
+          border-radius: 3px;
+        }
+        .out-row.best { background: var(--good-bg); }
+        .out-name { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; margin: 0; }
+        .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); margin: 2px 0 0; }
+        .out-kind {
+          font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
+          text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid; white-space: nowrap;
+        }
+        .k-digital  { color: #2E6B2E; border-color: #2E6B2E; }
+        .k-counter  { color: var(--stamp); border-color: var(--stamp); }
+        .k-informal { color: var(--gold); border-color: var(--gold); }
+        .out-usd { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; text-align: right; white-space: nowrap; }
+        .out-lost { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: right; }
       `}</style>
 
       <div className="ledger-header">
@@ -862,12 +898,72 @@ export default function RemittanceLedger() {
       {corridor === 'c2' && (
         <div className="research-wrap">
           <p className="research-headline">
-            There is currently no app or website that lets you send money from Uganda to the USA.
+            Almost every way to send money from Uganda to the USA ends at a physical counter. Readers helped us find two digital doors.
           </p>
           <p className="research-sub">
-            Every digital rail either omits the US, is switched off, or blocks Ugandan registration.
-            The only working options are physical agent counters. Field-verified in Kampala, July 2026.
+            The telcos omit or haven't switched on the US. Ria blocks Ugandan signups. The bank's "international" rail is a WU counter.
+            The two apps that work — Chipper Cash and Eversend — were both pointed out by readers after we published; nobody we asked in Kampala had named either.
+            Field-verified in Kampala, July 2026.
           </p>
+
+          <p className="research-section-title">What arrives in the US</p>
+
+          <div className="out-calc">
+            <div className="amount-row" style={{ marginTop: '6px' }}>
+              <span className="amount-label">Send</span>
+              <div className="amount-input-wrap">
+                <input
+                  className="amount-input"
+                  type="number"
+                  min="0"
+                  style={{ width: '180px' }}
+                  value={outUGX}
+                  onChange={e => setOutUGX(e.target.value === '' ? '' : Number(e.target.value))}
+                />
+                <span className="amount-prefix" style={{ fontSize: '20px', marginLeft: '6px', marginRight: 0 }}>UGX</span>
+              </div>
+            </div>
+
+            <div className="preset-row" style={{ marginBottom: '14px' }}>
+              {UGX_PRESETS.map(p => (
+                <button
+                  key={p}
+                  className={'preset-btn' + (Number(outUGX) === p ? ' active' : '')}
+                  onClick={() => setOutUGX(p)}
+                >
+                  {fmtUGXShort(p)}
+                </button>
+              ))}
+            </div>
+
+            {OUT_ROUTES
+              .map(r => {
+                const amt = Number(outUGX) || 0;
+                const usd = amt / r.effRate;
+                const lost = midRate > 0 ? (1 - midRate / r.effRate) * 100 : 0;
+                return { ...r, usd, lost };
+              })
+              .sort((a, b) => b.usd - a.usd)
+              .map((r, i) => (
+                <div key={r.id} className={'out-row' + (i === 0 ? ' best' : '')}>
+                  <div>
+                    <p className="out-name">{r.name}</p>
+                    <p className="out-note">{r.note}</p>
+                  </div>
+                  <span className={'out-kind k-' + r.kind}>{r.kind}</span>
+                  <div>
+                    <p className="out-usd" style={{ margin: 0 }}>{fmtUSD(r.usd)}</p>
+                    <p className="out-lost" style={{ margin: 0 }}>{r.lost.toFixed(1)}% lost</p>
+                  </div>
+                </div>
+              ))}
+
+            <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
+              Rates verified by hand in Kampala, July 2026 — fees and FX bundled into one effective rate,
+              calibrated to real 2,000,000 UGX quotes. "% lost" is measured against today's live mid-market rate,
+              so it moves as the shilling moves. Agent quotes vary by bureau. Confirm before you send.
+            </p>
+          </div>
 
           <p className="research-section-title">The rails, checked one by one</p>
 
@@ -879,8 +975,8 @@ export default function RemittanceLedger() {
 
           <div className="rail-row">
             <p className="rail-name">Airtel Money</p>
-            <span className="rail-status st-dormant">Built, not live</span>
-            <p className="rail-note">USA appears in the Rest-of-World menu — tapping it returns "service not live." So do England, UAE, Germany, Japan, Denmark and Ireland. Most of the rich-world tier is a dead button: the menu is built, the rails aren't. Verified via *185#, Jul 2026.</p>
+            <span className="rail-status st-dormant">Went dark</span>
+            <p className="rail-note">USA appears in the Rest-of-World menu — tapping it returns "service not live." So do England, UAE, Germany, Japan, Denmark and Ireland. But a reader reports a completed Uganda→UK transfer via Airtel Money in September 2025 at roughly 5% below mid-market — so this corridor was live and has since gone dark, rather than never having launched. Whatever switched it off is unexplained. Verified via *185#, Jul 2026.</p>
           </div>
 
           <div className="rail-row">
@@ -890,15 +986,45 @@ export default function RemittanceLedger() {
           </div>
 
           <div className="rail-row">
+            <p className="rail-name">Dahabshiil</p>
+            <span className="rail-status st-dead">Receive only</span>
+            <p className="rail-note">The hawala-rooted network: sender countries are Europe, UK and US only — not one African country can originate. Uganda receives (cash pickup: Kampala, Gulu, Arua; USD or UGX) while Kenya gets M-Pesa and bank options. Inbound pricing quirk: $30 fee on $500 but only $3 on the $10k max — the fee curve rewards the biggest senders. Verified in-app, Jul 2026.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Dahabshiil</p>
+            <span className="rail-status st-dead">No Uganda send</span>
+            <p className="rail-note">The East African specialist — but Uganda isn't a sender country in its app (same location wall as Ria). Inbound US→UG works: rate above mid-market (+1.5%) but ~6% fees at typical amounts, cash pickup only (Kampala, Gulu, Arua) — while Kenya gets M-Pesa and banks. Built for big transfers: $10,000 costs $3.</p>
+          </div>
+
+          <div className="rail-row">
             <p className="rail-name">WorldRemit</p>
             <span className="rail-status st-dead">Exited 2022</span>
             <p className="rail-note">Ceased all outbound services from Uganda in June 2022. Receiving still works; sending out does not.</p>
           </div>
 
           <div className="rail-row">
+            <p className="rail-name">Chipper Cash</p>
+            <span className="rail-status st-works">Works · digital · best rate</span>
+            <p className="rail-note">Reader-sourced lead #2, verified in-app: UGX → USA at rate 3,793.04 (≈ 3.2% vs mid-market) — the best formal rate found. Free via Chipper tag (both need accounts), or bank account payout. Oddly, its inbound US→UG rate (3,554.80, ≈ 3.2% markup) is mediocre — Chipper is cheap out of Uganda, expensive into it. Eversend is the exact mirror.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Chipper Cash</p>
+            <span className="rail-status st-works">Works · digital · cheapest</span>
+            <p className="rail-note">The second digital door — and the cheapest formal route found. UGX → US in-app: rate 3,793.04 (≈ 3.2% spread) + 0.25% fee ≈ 3.5% total. US side receives to bank, or free via Chipper tag (recipient needs the app). Reader-sourced ("works well and fast, downside is the exchange rates" — confirmed accurate), verified in-app Jul 2026. Inbound US→UG rate is weak (3,554.80) — best used outbound.</p>
+          </div>
+
+          <div className="rail-row">
+            <p className="rail-name">Eversend</p>
+            <span className="rail-status st-works">Works · digital</span>
+            <p className="rail-note">The one that actually works — found via a reader comment, not by any of the people we asked in Kampala. UGX wallet → US bank account: no fee, rate 3,843.93 vs mid-market ~3,674 (≈ 4.4% spread). For 2M UGX ≈ $520 arrives — cheaper than both counters, no trip required. Load via mobile money, Stanbic, or card (3% via Flutterwave). Verified in-app, Jul 2026.</p>
+          </div>
+
+          <div className="rail-row">
             <p className="rail-name">Wendi (Pearl Bank wallet)</p>
             <span className="rail-status st-dormant">Buggy / in limbo</span>
-            <p className="rail-note">The one app that advertises in-app Western Union sends abroad. Registered and tested: the WU flow asks for an address, then goes nowhere. Support says it's fee-free at standard WU rates "when it works." Uganda's only digital door is under construction with the lights on.</p>
+            <p className="rail-note">The one app that advertises in-app Western Union sends abroad. Registered and tested: the WU flow asks for an address, then goes nowhere. Support says it's fee-free at standard WU rates "when it works." A would-be third digital door, still under construction with the lights on.</p>
           </div>
 
           <div className="rail-row">
@@ -922,6 +1048,21 @@ export default function RemittanceLedger() {
           <div className="quote-card">
             <p className="quote-title">Western Union — $510 arrives</p>
             <p className="quote-line">Fee 22,738 UGX · rate 3,759 · <span className="quote-loss">≈ 6.3% lost</span> vs mid-market</p>
+          </div>
+
+          <div className="quote-card">
+            <p className="quote-title">Chipper Cash (app) — ≈ $527 arrives · fully digital, best formal rate</p>
+            <p className="quote-line">UGX → US: rate 3,793.04, free via Chipper tag · <span className="quote-loss">≈ 3.2% lost</span> vs mid-market — cheapest formal route found. Reader-sourced, verified in-app.</p>
+          </div>
+
+          <div className="quote-card">
+            <p className="quote-title">Chipper Cash (app) — ≈ $526 arrives · cheapest formal route</p>
+            <p className="quote-line">UGX → US in-app: rate 3,793.04 + 0.25% fee · <span className="quote-loss">≈ 3.5% lost</span> vs mid-market — fully digital, reader-sourced, verified in-app.</p>
+          </div>
+
+          <div className="quote-card">
+            <p className="quote-title">Eversend (app) — ≈ $520 arrives · fully digital</p>
+            <p className="quote-line">UGX wallet → US bank: no fee, rate 3,843.93 · <span className="quote-loss">≈ 4.4% lost</span> vs mid-market — beats both counters, no trip. Reader-sourced, then verified in-app.</p>
           </div>
 
           <div className="quote-card" style={{ background: 'var(--paper-deep)' }}>

@@ -1,5 +1,6 @@
 {
   "providers": [
+{ "id": "eversend", "name": "Eversend", "flatFee": 0.27, "percentFee": 0, "fxMarkup": -0.16, "cash": false, "bank": true, "mobile": true, "speed": "Minutes · wallet app · reader-sourced Jul 2026", "lastUpdated": "2026-07-27" },
     { "id": "wu",       "name": "Western Union", "flatFee": 0,    "percentFee": 0,   "fxMarkup": -3.0, "cash": true,  "bank": true,  "mobile": false, "speed": "Minutes (cash) · 1–2 days (bank) · rate above mid-market is promotional, verify before sending", "lastUpdated": "2026-07-10" },
     { "id": "mg",       "name": "MoneyGram",     "flatFee": 1.99, "percentFee": 0,   "fxMarkup": 0.15, "cash": true,  "bank": true,  "mobile": false, "speed": "Minutes (cash) · 1–3 days (bank)", "lastUpdated": "2026-07-10" },
     { "id": "wise",     "name": "Wise",          "flatFee": 1.60, "percentFee": 1.6, "fxMarkup": 0,    "cash": false, "bank": true,  "mobile": true,  "speed": "1–2 days · mobile money max 5M UGX (~$1,370)", "lastUpdated": "2026-07-10" },
