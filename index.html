@@ -4,10 +4,74 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Remittance Comparison Sheet - US to Uganda</title>
+
+    <title>Send Money Uganda ↔ USA: Real Fees Compared (Field-Verified) | Remittance Ledger</title>
+    <meta name="description" content="What it actually costs to send money between the US and Uganda. Every provider checked by hand in Kampala — Chipper, Eversend, LemFi, Wise, Western Union, MoneyGram, Sendwave, NALA. Free, no signup." />
+    <link rel="canonical" href="https://remittance-ledger.vercel.app/" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Social / WhatsApp link previews -->
+     <meta property="og:image" content="https://remittance-ledger.vercel.app/og-image.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://remittance-ledger.vercel.app/" />
+    <meta property="og:site_name" content="Remittance Ledger" />
+    <meta property="og:title" content="Send Money Uganda ↔ USA: Real Fees Compared" />
+    <meta property="og:description" content="Field-verified in Kampala. See what actually arrives after fees and exchange-rate markups — both directions. Free, no signup." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Send Money Uganda ↔ USA: Real Fees Compared" />
+    <meta name="twitter:description" content="Field-verified in Kampala. See what actually arrives after fees and exchange-rate markups — both directions." />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Content below is replaced by the React app on load. It exists so crawlers
+         and no-JS clients still get the findings. Keep it in sync with the app. -->
+    <div id="root">
+      <article style="font-family: system-ui, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #2B2620;">
+        <h1>Sending money between the US and Uganda: what it actually costs</h1>
+        <p>
+          A free tool comparing what recipients really receive after fees and exchange-rate
+          markups. Every rate below was checked by hand in Kampala in July 2026 — at agent
+          counters, in bank branches, and inside each app — not copied from marketing pages.
+        </p>
+
+        <h2>Sending money from the USA to Uganda</h2>
+        <p>
+          Costs range from roughly 1% to over 6% of the amount sent, depending on the provider
+          and how the recipient is paid. Most services advertise "no fees" while taking their
+          margin in the exchange rate instead, so the headline fee is rarely the real cost.
+          Providers compared: LemFi, Sendwave, NALA, Eversend, Wise, Remitly, WorldRemit,
+          Western Union and MoneyGram, across cash pickup, bank deposit and mobile money
+          (MTN MoMo and Airtel Money).
+        </p>
+
+        <h2>Sending money from Uganda to the USA</h2>
+        <p>
+          This direction is far harder and far more expensive, and almost nothing online
+          documents it. MTN MoMo's international transfers reach 22 countries but not the
+          United States. Airtel Money lists the USA in its menu but returns "service not
+          live" — though a completed Uganda-to-UK transfer in September 2025 suggests this
+          corridor was switched off rather than never launched. Ria's app blocks registration
+          from Uganda. WorldRemit ended outbound service from Uganda in 2022. Bank apps do
+          not send internationally; the bank's international counter is Western Union.
+        </p>
+        <p>
+          What does work: two apps and the agent counters. Chipper Cash and Eversend both
+          send from a Ugandan wallet to a US bank account entirely from the phone, at roughly
+          3.4% and 4.4% below the mid-market rate respectively. Western Union and MoneyGram
+          work from a forex bureau with cash and a national ID, costing about 6.3% and 5.4%.
+          Peer-to-peer stablecoin trading carries the smallest spread, around 2.5%, but brings
+          real scam risk and unclear regulation.
+        </p>
+
+        <h2>How this is researched</h2>
+        <p>
+          Quotes are collected in person and in-app, dated, and published with the method
+          shown. Readers correct it — several providers on this map were added or fixed
+          because someone who uses them wrote in. Corrections and quotes from your own
+          bureau or bank are welcome.
+        </p>
+        <p><em>Loading the interactive comparison…</em></p>
+      </article>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
