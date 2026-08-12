@@ -61,7 +61,7 @@ const OUT_ROUTES = [
     fundMobile: chipperDeposit, fundBank: () => 0 },
   { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital',
     note: 'In-app · US bank · no transfer fee',
-    fundMobile: eversendDeposit, fundBank: null },
+    fundMobile: eversendDeposit, fundBank: () => 0 },
   { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter',
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
@@ -1058,7 +1058,7 @@ export default function RemittanceLedger() {
             <p className="research-sub" style={{ margin: '0 0 10px' }}>
               {funding === 'mobile'
                 ? 'Instant, but loading a wallet from MTN or Airtel carries a deposit fee — Chipper charges 2.5%, Eversend a flat 37,103 UGX plus 0.49%. Counters take cash, so they are unaffected.'
-                : 'Chipper deposits from Absa or Stanbic are free but take 1\u20132 days. Eversend bank funding has not been verified yet.'}
+                : 'Bank deposits carry no platform fee on either app \u2014 Chipper from Absa or Stanbic, Eversend from Stanbic \u2014 but take 1\u20132 days to clear. Counters take cash and are unaffected.'}
             </p>
 
             <div className="preset-row" style={{ marginBottom: '14px' }}>
