@@ -9,14 +9,65 @@ const DEFAULT_PROVIDERS = providerData.providers;
 const PRESETS = [50, 100, 200, 500, 1000];
 const UGX_PRESETS = [500000, 1000000, 2000000, 3500000, 5000000];
 
+// Uganda mobile money cash-out cost: 0.5% government withdrawal levy plus a tiered
+// agent fee. Tiers below are approximate and vary by network and agent — treat as an
+// estimate, not a quote. Verified against published MTN/Airtel tariff bands, Jul 2026.
+const WITHDRAWAL_LEVY = 0.005;
+const AGENT_FEE_TIERS = [
+  [5000, 330], [15000, 440], [30000, 700], [45000, 880], [60000, 1000],
+  [125000, 1650], [250000, 2750], [500000, 4400], [1000000, 7150],
+  [2000000, 12500], [4000000, 15000], [Infinity, 20000],
+];
+
+function agentFee(ugx) {
+  for (const [ceiling, fee] of AGENT_FEE_TIERS) if (ugx <= ceiling) return fee;
+  return 20000;
+}
+function cashOutCost(ugx) {
+  if (ugx <= 0) return 0;
+  return ugx * WITHDRAWAL_LEVY + agentFee(ugx);
+}
+// Solve for the wallet amount needed so `target` survives cash-out. Fees are
+// monotonic and small, so a few fixed-point passes converge tightly.
+function grossUpForCashOut(target) {
+  let gross = target;
+  for (let i = 0; i < 12; i++) gross = target + cashOutCost(gross);
+  return gross;
+}
+
 // Uganda → US routes. effRate = UGX actually surrendered per USD delivered,
 // derived from real field quotes (fees + FX bundled). Verified Kampala, Jul 2026.
+// Chipper deposit tariff: 2.5% of the band ceiling (published tariff sheet, Oct 2024).
+const CHIPPER_DEPOSIT_BANDS = [
+  [2500,65],[5000,125],[15000,375],[30000,750],[45000,1125],[60000,1500],[125000,3125],
+  [250000,6250],[500000,12500],[1000000,25000],[2000000,50000],[4000000,100000],[5000000,125000],
+];
+function chipperDeposit(ugx) {
+  for (const [ceiling, fee] of CHIPPER_DEPOSIT_BANDS) if (ugx <= ceiling) return fee;
+  return 125000;
+}
+// Eversend deposit: flat 37,103 UGX + 0.49%. Fitted exactly to five in-app quotes
+// (200k / 500k / 1M / 2M / 5M), Kampala, Aug 2026.
+function eversendDeposit(ugx) { return ugx > 0 ? 37103 + 0.0049 * ugx : 0; }
+
+// Uganda → US routes. effRate = UGX surrendered per USD delivered once the money is
+// already in the wallet. fundMobile/fundBank add the cost of getting it there.
 const OUT_ROUTES = [
-  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal', note: 'Binance P2P order book · scam risk, murky rules' },
-  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital',  note: 'In-app · US bank or free Chipper tag' },
-  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital',  note: 'In-app · US bank · no fee' },
-  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter',  note: 'Agent desk · national ID + purpose of funds' },
-  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter',  note: 'Agent desk · national ID + purpose of funds' },
+  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal',
+    note: 'Binance P2P · scam risk, murky rules · MoMo send charge not modelled',
+    fundMobile: () => 0, fundBank: null },
+  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital',
+    note: 'In-app · US bank or free Chipper tag',
+    fundMobile: chipperDeposit, fundBank: () => 0 },
+  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital',
+    note: 'In-app · US bank · no transfer fee',
+    fundMobile: eversendDeposit, fundBank: null },
+  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter',
+    note: 'Agent desk · cash in hand · national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
+  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter',
+    note: 'Agent desk · cash in hand · national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
 ];
 
 function fmtUGXShort(n) {
@@ -39,6 +90,16 @@ const METHODS = [
   { key: 'mobile', label: 'Mobile money' },
 ];
 
+// Every change readers have forced. The map is only as good as its corrections.
+const CORRECTIONS = [
+  { date: '2026-07-04', who: 'u/moistandwarm1', what: 'Wise had been marked as not offering mobile money to Uganda. It had supported it for months. Corrected, with the 5,000,000 UGX per-transfer cap added.' },
+  { date: '2026-07-11', who: 'u/brygad', what: 'Pointed out that people walk into banks asking the reverse question — "what do I send so they receive exactly X?" Built the "They need" mode because of this comment.' },
+  { date: '2026-07-27', who: 'u/Long-Definition7091', what: 'Named Eversend, which the Uganda→US research had missed entirely. It works: no fee, roughly 4.4% below mid-market. It changed the conclusion of the published findings.' },
+  { date: '2026-07-27', who: 'u/Available-Way-8534', what: 'Flagged Chipper Cash as fast but weak on rates. Verified: about 3.5% all-in — which makes it the cheapest formal route on the map. The rate criticism was accurate.' },
+  { date: '2026-07-27', who: 'u/Feeling_Abrocoma502', what: 'Suggested Dahabshiil. Checked it — Uganda is not a sender country in their app. Mapped as a dead end rather than dropped.' },
+  { date: '2026-07-28', who: 'u/ParticularAd1705', what: 'Reported a completed Uganda→UK transfer via Airtel Money in September 2025. That corridor was live and has since gone dark, rather than never having launched. Finding rewritten.' },
+];
+
 function fmtUSD(n) {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -52,7 +113,10 @@ export default function RemittanceLedger() {
   const [mode, setMode] = useState('send'); // 'send' | 'receive'
   const [targetUGX, setTargetUGX] = useState(2000000);
   const [outUGX, setOutUGX] = useState(2000000);
+  const [funding, setFunding] = useState('mobile'); // 'mobile' | 'bank'
+  const [showLog, setShowLog] = useState(false);
   const [method, setMethod] = useState('mobile');
+  const [cashOut, setCashOut] = useState(false);
   const [midRate, setMidRate] = useState(FALLBACK_MID_RATE);
   // 'checking' while we fetch, 'live' if the API answered, 'fallback' if it
   // didn't, 'manual' once the user edits the rate themselves.
@@ -113,20 +177,25 @@ export default function RemittanceLedger() {
         const totalFeeUSD = p.flatFee + amt * (p.percentFee / 100);
         const netUSD = Math.max(amt - totalFeeUSD, 0);
         const effectiveRate = midRate * (1 - p.fxMarkup / 100);
-        const recipientUGX = netUSD * effectiveRate;
+        const walletUGX = netUSD * effectiveRate;
+        const applyCashOut = cashOut && method === 'mobile';
+        const cashOutFee = applyCashOut ? cashOutCost(walletUGX) : 0;
+        const recipientUGX = Math.max(walletUGX - cashOutFee, 0);
         const usdEquivalent = midRate > 0 ? recipientUGX / midRate : 0;
         const percentLost = amt > 0 ? ((amt - usdEquivalent) / amt) * 100 : 0;
         // Inverse: what USD must be sent so the recipient gets targetUGX?
-        const tgt = Number(targetUGX) || 0;
+        // With cash-out on, gross up so the target survives the levy and agent fee.
+        const tgtRaw = Number(targetUGX) || 0;
+        const tgt = applyCashOut ? grossUpForCashOut(tgtRaw) : tgtRaw;
         const pct = p.percentFee / 100;
         const usdNeeded = effectiveRate > 0 && pct < 1
           ? (tgt / effectiveRate + p.flatFee) / (1 - pct)
           : Infinity;
         const feeReceive = usdNeeded === Infinity ? 0 : p.flatFee + usdNeeded * pct;
         const percentLostReceive = usdNeeded > 0 && usdNeeded !== Infinity && midRate > 0
-          ? ((usdNeeded - tgt / midRate) / usdNeeded) * 100
+          ? ((usdNeeded - tgtRaw / midRate) / usdNeeded) * 100
           : 0;
-        return { ...p, available, totalFeeUSD, recipientUGX, effectiveRate, percentLost, usdNeeded, feeReceive, percentLostReceive };
+        return { ...p, available, totalFeeUSD, walletUGX, cashOutFee, recipientUGX, effectiveRate, percentLost, usdNeeded, feeReceive, percentLostReceive };
       })
       .sort((a, b) => {
         if (a.available !== b.available) return a.available ? -1 : 1;
@@ -134,7 +203,7 @@ export default function RemittanceLedger() {
           ? b.recipientUGX - a.recipientUGX
           : a.usdNeeded - b.usdNeeded;
       });
-  }, [providers, amount, method, midRate, mode, targetUGX]);
+  }, [providers, amount, method, midRate, mode, targetUGX, cashOut]);
 
   const bestId = rows.find(r => r.available)?.id;
 
@@ -731,6 +800,37 @@ export default function RemittanceLedger() {
         .k-informal { color: var(--gold); border-color: var(--gold); }
         .out-usd { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; text-align: right; white-space: nowrap; }
         .out-lost { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: right; }
+
+        .log-panel {
+          margin-top: 16px; border: 1px solid var(--rule); border-radius: 4px;
+          background: var(--paper-deep); padding: 14px 16px;
+        }
+        .log-entry { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+        .log-entry:last-child { border-bottom: none; }
+        .log-meta {
+          font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em;
+          color: var(--ink-light); margin: 0 0 3px;
+        }
+        .log-who { color: var(--teal); font-weight: 500; }
+        .log-what { font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.65; margin: 0; }
+
+        .cashout-row {
+          display: flex; align-items: center; gap: 8px; margin-top: 12px;
+          font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          flex-wrap: wrap;
+        }
+        .cashout-switch {
+          display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+          border: 1px solid var(--rule); border-radius: 14px; padding: 4px 11px;
+          background: transparent; color: var(--ink); font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+        }
+        .cashout-switch.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+        .cashout-hint { font-size: 10px; line-height: 1.5; width: 100%; margin: 2px 0 0; }
+        .row-cashout {
+          font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+          color: var(--stamp); margin: 2px 0 0; text-align: right;
+        }
       `}</style>
 
       <div className="ledger-header">
@@ -859,6 +959,23 @@ export default function RemittanceLedger() {
             </button>
           ))}
         </div>
+
+        {method === 'mobile' && (
+          <div className="cashout-row">
+            <button
+              className={'cashout-switch' + (cashOut ? ' on' : '')}
+              onClick={() => setCashOut(c => !c)}
+            >
+              {cashOut ? '\u2713 Cash-out included' : 'Add cash-out cost'}
+            </button>
+            <span>{cashOut ? 'showing what lands in hand' : 'showing what lands in the wallet'}</span>
+            <p className="cashout-hint">
+              Withdrawing mobile money as cash costs a 0.5% levy plus a tiered agent fee.
+              Spending straight from the wallet — school fees, merchants, airtime, sending
+              onward — costs nothing extra. Agent tiers are approximate and vary by network.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="perforation" />
@@ -880,9 +997,14 @@ export default function RemittanceLedger() {
                   fee {fmtUSD(mode === 'send' ? r.totalFeeUSD : r.feeReceive)}<br />
                   {(mode === 'send' ? r.percentLost : r.percentLostReceive).toFixed(1)}% lost
                 </span>
-                <span className="row-amount">
-                  {mode === 'send' ? fmtUGX(r.recipientUGX) : fmtUSD(r.usdNeeded)}
-                </span>
+                <div>
+                  <p className="row-amount" style={{ margin: 0 }}>
+                    {mode === 'send' ? fmtUGX(r.recipientUGX) : fmtUSD(r.usdNeeded)}
+                  </p>
+                  {cashOut && method === 'mobile' && mode === 'send' && r.cashOutFee > 0 && (
+                    <p className="row-cashout">\u2212{fmtUGX(r.cashOutFee)} to cash out</p>
+                  )}
+                </div>
               </>
             ) : (
               <span className="unavailable-tag" style={{ gridColumn: '3 / span 2' }}>
@@ -924,6 +1046,21 @@ export default function RemittanceLedger() {
               </div>
             </div>
 
+            <div className="method-row" style={{ marginTop: '12px', marginBottom: '10px' }}>
+              <button className={'method-btn' + (funding === 'mobile' ? ' active' : '')} onClick={() => setFunding('mobile')}>
+                From mobile money
+              </button>
+              <button className={'method-btn' + (funding === 'bank' ? ' active' : '')} onClick={() => setFunding('bank')}>
+                From bank
+              </button>
+            </div>
+
+            <p className="research-sub" style={{ margin: '0 0 10px' }}>
+              {funding === 'mobile'
+                ? 'Instant, but loading a wallet from MTN or Airtel carries a deposit fee — Chipper charges 2.5%, Eversend a flat 37,103 UGX plus 0.49%. Counters take cash, so they are unaffected.'
+                : 'Chipper deposits from Absa or Stanbic are free but take 1\u20132 days. Eversend bank funding has not been verified yet.'}
+            </p>
+
             <div className="preset-row" style={{ marginBottom: '14px' }}>
               {UGX_PRESETS.map(p => (
                 <button
@@ -939,11 +1076,14 @@ export default function RemittanceLedger() {
             {OUT_ROUTES
               .map(r => {
                 const amt = Number(outUGX) || 0;
-                const usd = amt / r.effRate;
-                const lost = midRate > 0 ? (1 - midRate / r.effRate) * 100 : 0;
-                return { ...r, usd, lost };
+                const fn = funding === 'bank' ? r.fundBank : r.fundMobile;
+                const unverified = fn === null;
+                const fundFee = unverified ? 0 : fn(amt);
+                const usd = Math.max(amt - fundFee, 0) / r.effRate;
+                const lost = amt > 0 && midRate > 0 ? (1 - usd / (amt / midRate)) * 100 : 0;
+                return { ...r, usd, lost, fundFee, unverified };
               })
-              .sort((a, b) => b.usd - a.usd)
+              .sort((a, b) => (a.unverified === b.unverified ? b.usd - a.usd : a.unverified ? 1 : -1))
               .map((r, i) => (
                 <div key={r.id} className={'out-row' + (i === 0 ? ' best' : '')}>
                   <div>
@@ -952,8 +1092,17 @@ export default function RemittanceLedger() {
                   </div>
                   <span className={'out-kind k-' + r.kind}>{r.kind}</span>
                   <div>
-                    <p className="out-usd" style={{ margin: 0 }}>{fmtUSD(r.usd)}</p>
-                    <p className="out-lost" style={{ margin: 0 }}>{r.lost.toFixed(1)}% lost</p>
+                    {r.unverified ? (
+                      <p className="out-lost" style={{ margin: 0 }}>not verified</p>
+                    ) : (
+                      <>
+                        <p className="out-usd" style={{ margin: 0 }}>{fmtUSD(r.usd)}</p>
+                        <p className="out-lost" style={{ margin: 0 }}>
+                          {r.lost.toFixed(1)}% lost
+                          {r.fundFee > 0 && <><br />{'\u2212'}{fmtUGX(r.fundFee)} to fund</>}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1097,6 +1246,26 @@ export default function RemittanceLedger() {
           <button className="edit-toggle" onClick={() => setEditing(e => !e)}>
             {editing ? 'Hide rate assumptions' : 'Adjust rate assumptions'}
           </button>
+        )}
+
+        <button className="edit-toggle" style={{ marginLeft: corridor === 'c1' ? '8px' : 0 }} onClick={() => setShowLog(s => !s)}>
+          {showLog ? 'Hide corrections' : `Corrected ${CORRECTIONS.length}× by readers`}
+        </button>
+
+        {showLog && (
+          <div className="log-panel">
+            <p className="edit-panel-title">What readers have corrected</p>
+            <p className="log-what" style={{ color: 'var(--ink-light)', marginBottom: '8px' }}>
+              This map is wrong until someone tells us. Every change below came from a person who
+              actually uses these routes.
+            </p>
+            {CORRECTIONS.map((c, i) => (
+              <div className="log-entry" key={i}>
+                <p className="log-meta">{formatUpdated(c.date)} · <span className="log-who">{c.who}</span></p>
+                <p className="log-what">{c.what}</p>
+              </div>
+            ))}
+          </div>
         )}
 
         {corridor === 'c1' && editing && (
