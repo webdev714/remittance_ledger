@@ -35,6 +35,34 @@ function grossUpForCashOut(target) {
   return gross;
 }
 
+// Destinations reachable from Uganda. `mapped` means pricing has been field-verified;
+// unmapped ones show what the telco menus advertise, with pricing still to collect.
+const DESTINATIONS = [
+  { code: 'US', name: 'United States', cur: 'USD', sym: '$',   mapped: true  },
+  { code: 'UK', name: 'United Kingdom', cur: 'GBP', sym: '\u00A3', mapped: true  },
+  { code: 'CA', name: 'Canada',         cur: 'CAD', sym: 'C$',  mapped: false },
+  { code: 'KE', name: 'Kenya',          cur: 'KES', sym: 'KSh', mapped: true  },
+  { code: 'AE', name: 'UAE',            cur: 'AED', sym: 'AED', mapped: true  },
+  { code: 'EU', name: 'Euro area',      cur: 'EUR', sym: '\u20AC', mapped: true  },
+];
+
+// What the telco menus advertise per destination, from the *165# / *185# menu walks.
+// Pricing for unmapped destinations is not yet collected.
+const MENU_AVAILABILITY = {
+  UK: { mtn: 'Bank transfer listed', airtel: 'Listed but "service not live"',
+        note: 'A reader completed a Uganda\u2192UK Airtel transfer in Sept 2025 at roughly 5% below mid-market, so this corridor was live and has since gone dark.' },
+  CA: { mtn: 'Bank transfer listed \u2014 but no rate shown until you enter recipient bank details',
+        airtel: 'Listed in Rest of World, returns "service not live"',
+        note: 'The only rich-world destination MTN reaches by bank while the US is absent \u2014 and you cannot price it before committing. MTN will not quote a rate until recipient bank details are entered, so there is no way to compare before you send. That is the finding.' },
+  KE: { mtn: 'Africa mobile networks + bank transfer', airtel: 'East Africa tier \u2014 mobile + bank',
+        note: 'The best-served corridor on both networks. East African rails work in a way the rich-world ones do not.' },
+  AE: { mtn: 'Bank transfer listed', airtel: 'Listed but "service not live"',
+        note: 'Significant Ugandan labour migration to the Gulf; almost nothing published on what this corridor costs.' },
+  EU: { mtn: 'Euro banks listed \u2014 pricing not yet collected',
+        airtel: 'Germany, Denmark and Ireland tested: all return "service not live"',
+        note: 'Diaspora traffic to this map already comes from Belgium, the Netherlands, France, Spain and Sweden. Airtel\u2019s European corridors are dead buttons like the rest of its rich-world tier; MTN\u2019s Euro banks option remains unquoted.' },
+};
+
 // Uganda → US routes. effRate = UGX actually surrendered per USD delivered,
 // derived from real field quotes (fees + FX bundled). Verified Kampala, Jul 2026.
 // Chipper deposit tariff: 2.5% of the band ceiling (published tariff sheet, Oct 2024).
@@ -52,7 +80,7 @@ function eversendDeposit(ugx) { return ugx > 0 ? 37103 + 0.0049 * ugx : 0; }
 
 // Uganda → US routes. effRate = UGX surrendered per USD delivered once the money is
 // already in the wallet. fundMobile/fundBank add the cost of getting it there.
-const OUT_ROUTES = [
+const OUT_ROUTES_US = [
   { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal',
     note: 'Binance P2P · scam risk, murky rules · MoMo send charge not modelled',
     fundMobile: () => 0, fundBank: null },
@@ -69,6 +97,56 @@ const OUT_ROUTES = [
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
+
+const OUT_ROUTES_KE = [
+  { id: 'ke-ever',   name: 'Eversend',      effRate: 29.56,  kind: 'digital',
+    note: 'In-app \u00b7 M-Pesa or bank \u00b7 1,989 UGX fee on top',
+    fundMobile: eversendDeposit, fundBank: () => 0 },
+  { id: 'ke-airtel', name: 'Airtel Money',  effRate: 30.36,  kind: 'telco',
+    note: '*185# \u00b7 Airtel Kenya or M-Pesa \u00b7 1,000 UGX fee, rest hidden in the rate',
+    fundMobile: () => 0, fundBank: null },
+  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: 30.50,  kind: 'digital',
+    note: 'Chipper tag only \u2014 no bank or mobile money payout to Kenya',
+    fundMobile: chipperDeposit, fundBank: () => 0 },
+  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: 30.70,  kind: 'telco',
+    note: '*165# \u00b7 Africa mobile networks \u00b7 1,000 UGX fee, rest hidden in the rate',
+    fundMobile: () => 0, fundBank: null },
+];
+
+const OUT_ROUTES_UK = [
+  { id: 'uk-ever', name: 'Eversend',            effRate: 5250.1, kind: 'digital',
+    note: 'In-app \u00b7 bank transfer only \u00b7 14,718 UGX fee on top',
+    fundMobile: eversendDeposit, fundBank: () => 0 },
+  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: 5370.0, kind: 'telco',
+    note: '*165# \u2192 More countries \u00b7 bank transfer only',
+    fundMobile: () => 0, fundBank: null },
+];
+
+const OUT_ROUTES_AE = [
+  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: 1067.24, kind: 'telco',
+    note: '*165# \u2192 More countries \u00b7 the only quotable route found \u00b7 Airtel lists the UAE but returns "service not live"',
+    fundMobile: () => 0, fundBank: null },
+];
+
+const OUT_ROUTES_EU = [
+  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: 4506.9, kind: 'telco',
+    note: '*165# \u00b7 Euro banks \u00b7 flat 1,000 UGX network fee up to 5M \u00b7 rate only visible once the funds are in your wallet',
+    fundMobile: () => 0, fundBank: null },
+  { id: 'eu-ever', name: 'Eversend',              effRate: 4520.1, kind: 'digital',
+    note: 'In-app \u00b7 bank transfer \u00b7 better headline rate, but a 13,983 UGX fee on top cancels it out',
+    fundMobile: eversendDeposit, fundBank: () => 0 },
+];
+
+const OUT_ROUTES = { US: OUT_ROUTES_US, KE: OUT_ROUTES_KE, UK: OUT_ROUTES_UK, AE: OUT_ROUTES_AE, EU: OUT_ROUTES_EU };
+
+// Corridors where the agent counters (Western Union, MoneyGram) have not been quoted yet.
+const COUNTERS_PENDING = ['KE', 'UK', 'AE', 'EU'];
+
+function fmtDest(n, d) {
+  if (!isFinite(n)) return '\u2014';
+  const dp = n >= 1000 ? 0 : 2;
+  return d.sym + n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
 
 function fmtUGXShort(n) {
   return n >= 1000000 ? (n / 1000000) + 'M' : (n / 1000) + 'K';
@@ -114,6 +192,8 @@ export default function RemittanceLedger() {
   const [targetUGX, setTargetUGX] = useState(2000000);
   const [outUGX, setOutUGX] = useState(2000000);
   const [funding, setFunding] = useState('mobile'); // 'mobile' | 'bank'
+  const [dest, setDest] = useState('US');
+  const [fxRates, setFxRates] = useState(null);
   const [showLog, setShowLog] = useState(false);
   const [method, setMethod] = useState('mobile');
   const [cashOut, setCashOut] = useState(false);
@@ -139,6 +219,7 @@ export default function RemittanceLedger() {
         const ugx = d?.rates?.UGX;
         if (typeof ugx === 'number' && ugx > 0) {
           setMidRate(Math.round(ugx));
+          setFxRates(d.rates);
           setRateSource('live');
         } else {
           setRateSource('fallback');
@@ -205,6 +286,37 @@ export default function RemittanceLedger() {
       });
   }, [providers, amount, method, midRate, mode, targetUGX, cashOut]);
 
+  const midFor = (cur) => cur === 'USD'
+    ? midRate
+    : (fxRates && fxRates[cur] ? midRate / fxRates[cur] : null);
+
+  const comparison = useMemo(() => {
+    const amt = Number(outUGX) || 0;
+    return DESTINATIONS
+      .filter(d => d.mapped && (OUT_ROUTES[d.code] || []).length > 0)
+      .map(d => {
+        const ref = midFor(d.cur);
+        const scored = OUT_ROUTES[d.code].map(r => {
+          const fn = funding === 'bank' ? r.fundBank : r.fundMobile;
+          if (fn === null) return null;
+          const got = Math.max(amt - fn(amt), 0) / r.effRate;
+          return { name: r.name, got };
+        }).filter(Boolean);
+        if (!scored.length || !ref) return null;
+        const best = scored.reduce((a, b) => (b.got > a.got ? b : a));
+        const lost = amt > 0 ? (1 - best.got / (amt / ref)) * 100 : 0;
+        return { ...d, best, lost };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.lost - b.lost);
+  }, [outUGX, funding, midRate, fxRates]);
+
+  const destInfo = DESTINATIONS.find(d => d.code === dest) || DESTINATIONS[0];
+  // UGX per unit of the destination currency, derived from the same USD-based feed.
+  const destMid = destInfo.cur === 'USD'
+    ? midRate
+    : (fxRates && fxRates[destInfo.cur] ? midRate / fxRates[destInfo.cur] : null);
+
   const bestId = rows.find(r => r.available)?.id;
 
   const rateLabel =
@@ -216,7 +328,7 @@ export default function RemittanceLedger() {
   return (
     <div className="ledger-root">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
         .ledger-root {
           --paper: #F6F1E7;
@@ -229,14 +341,17 @@ export default function RemittanceLedger() {
           --teal: #1F3D3A;
           --good-bg: #EAF1E7;
 
-          font-family: 'Inter', sans-serif;
+          font-family: 'IBM Plex Sans', system-ui, sans-serif;
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: 'tnum' 1, 'lnum' 1;
           color: var(--ink);
           background: var(--paper);
           background-image:
             repeating-linear-gradient(transparent, transparent 27px, var(--rule) 28px);
           border: 1px solid var(--rule);
           border-radius: 4px;
-          max-width: 720px;
+          max-width: 1060px;
+          width: 100%;
           margin: 0 auto;
           padding: 0;
           box-shadow: 0 1px 3px rgba(43,38,32,0.08), 0 8px 24px rgba(43,38,32,0.06);
@@ -246,7 +361,7 @@ export default function RemittanceLedger() {
         .ledger-header {
           background: var(--teal);
           color: var(--paper);
-          padding: 22px 28px 18px;
+          padding: 30px 44px 26px;
           position: relative;
         }
         .ledger-eyebrow {
@@ -258,21 +373,22 @@ export default function RemittanceLedger() {
           margin: 0 0 6px;
         }
         .ledger-title {
-          font-family: 'Fraunces', serif;
-          font-size: 28px;
+          font-family: 'IBM Plex Serif', Georgia, serif;
+          font-size: 34px;
+          letter-spacing: -0.015em;
           font-weight: 600;
           margin: 0;
           letter-spacing: 0.01em;
         }
         .ledger-sub {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 13px;
           color: rgba(246,241,231,0.65);
           margin: 6px 0 0;
         }
 
         .ledger-body {
-          padding: 24px 28px 8px;
+          padding: 30px 44px 10px;
         }
 
         .amount-row {
@@ -282,7 +398,7 @@ export default function RemittanceLedger() {
           flex-wrap: wrap;
         }
         .amount-label {
-          font-family: 'Fraunces', serif;
+          font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 18px;
           color: var(--ink-light);
         }
@@ -294,13 +410,13 @@ export default function RemittanceLedger() {
         }
         .amount-prefix {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 32px;
+          font-size: 38px;
           color: var(--ink-light);
           margin-right: 4px;
         }
         .amount-input {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 32px;
+          font-size: 38px;
           font-weight: 600;
           color: var(--ink);
           background: transparent;
@@ -424,15 +540,15 @@ export default function RemittanceLedger() {
         .perforation::after { right: -35px; }
 
         .rows-wrap {
-          padding: 16px 28px 8px;
+          padding: 20px 44px 10px;
         }
 
         .ledger-row {
           display: grid;
-          grid-template-columns: 28px 1fr auto auto;
+          grid-template-columns: 32px minmax(0, 1fr) 150px 190px;
           align-items: center;
-          gap: 14px;
-          padding: 12px 10px;
+          gap: 18px;
+          padding: 16px 12px;
           border-radius: 4px;
           position: relative;
           margin-bottom: 4px;
@@ -450,14 +566,14 @@ export default function RemittanceLedger() {
         }
         .row-name-wrap { min-width: 0; }
         .row-name {
-          font-family: 'Fraunces', serif;
-          font-size: 16px;
+          font-family: 'IBM Plex Serif', Georgia, serif;
+          font-size: 17px;
           font-weight: 600;
           margin: 0;
         }
         .row-meta {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 11.5px;
           color: var(--ink-light);
           margin: 2px 0 0;
         }
@@ -469,8 +585,9 @@ export default function RemittanceLedger() {
           white-space: nowrap;
         }
         .row-amount {
+          font-variant-numeric: tabular-nums;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 17px;
+          font-size: 19px;
           font-weight: 600;
           text-align: right;
           white-space: nowrap;
@@ -508,7 +625,7 @@ export default function RemittanceLedger() {
         }
 
         .footer {
-          padding: 18px 28px 24px;
+          padding: 24px 44px 32px;
         }
         .edit-toggle {
           font-family: 'IBM Plex Mono', monospace;
@@ -533,7 +650,7 @@ export default function RemittanceLedger() {
           padding: 14px 16px;
         }
         .edit-panel-title {
-          font-family: 'Fraunces', serif;
+          font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 14px;
           font-weight: 600;
           margin: 0 0 10px;
@@ -676,7 +793,7 @@ export default function RemittanceLedger() {
         .corridor-tabs {
           display: flex;
           background: var(--teal);
-          padding: 0 28px;
+          padding: 0 44px;
           gap: 0;
         }
         .corridor-tab {
@@ -696,9 +813,9 @@ export default function RemittanceLedger() {
           border-bottom-color: var(--gold);
         }
 
-        .research-wrap { padding: 20px 28px 8px; }
+        .research-wrap { padding: 26px 44px 10px; }
         .research-headline {
-          font-family: 'Fraunces', serif;
+          font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 19px;
           font-weight: 600;
           line-height: 1.4;
@@ -721,7 +838,7 @@ export default function RemittanceLedger() {
           flex-wrap: wrap;
         }
         .rail-name {
-          font-family: 'Fraunces', serif;
+          font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 15px;
           font-weight: 600;
           margin: 0;
@@ -755,7 +872,7 @@ export default function RemittanceLedger() {
           margin: 14px 0 0;
         }
         .quote-title {
-          font-family: 'Fraunces', serif;
+          font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 15px;
           font-weight: 700;
           margin: 0 0 6px;
@@ -781,16 +898,16 @@ export default function RemittanceLedger() {
         .out-calc { margin: 4px 0 22px; }
         .out-row {
           display: grid;
-          grid-template-columns: 1fr auto auto;
+          grid-template-columns: minmax(0, 1fr) 120px 190px;
           align-items: center;
-          gap: 10px;
-          padding: 11px 8px;
+          gap: 18px;
+          padding: 15px 12px;
           border-bottom: 1px solid var(--rule);
           border-radius: 3px;
         }
         .out-row.best { background: var(--good-bg); }
-        .out-name { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; margin: 0; }
-        .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); margin: 2px 0 0; }
+        .out-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 600; margin: 0; }
+        .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 0; }
         .out-kind {
           font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
           text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid; white-space: nowrap;
@@ -798,7 +915,8 @@ export default function RemittanceLedger() {
         .k-digital  { color: #2E6B2E; border-color: #2E6B2E; }
         .k-counter  { color: var(--stamp); border-color: var(--stamp); }
         .k-informal { color: var(--gold); border-color: var(--gold); }
-        .out-usd { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; text-align: right; white-space: nowrap; }
+        .k-telco    { color: var(--ink-light); border-color: var(--ink-light); }
+        .out-usd { font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 600; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
         .out-lost { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: right; }
 
         .log-panel {
@@ -831,10 +949,67 @@ export default function RemittanceLedger() {
           font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
           color: var(--stamp); margin: 2px 0 0; text-align: right;
         }
+
+        .dest-row { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+        .dest-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); }
+        .dest-select {
+          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 600; color: var(--ink);
+          background: transparent; border: none; border-bottom: 2px solid var(--ink);
+          padding: 2px 20px 2px 2px; cursor: pointer; outline: none;
+          appearance: none; -webkit-appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+          background-position: right 8px top 55%, right 3px top 55%;
+          background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+        }
+        .pending-card {
+          border: 1px dashed var(--rule); border-radius: 4px; background: var(--paper-deep);
+          padding: 16px 18px; margin: 6px 0 20px;
+        }
+        .pending-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+        .pending-line {
+          font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.7; margin: 0 0 4px;
+        }
+        .pending-key { color: var(--ink-light); }
+
+        @media (max-width: 760px) {
+          .ledger-header { padding: 22px 20px 18px; }
+          .ledger-title { font-size: 26px; }
+          .corridor-tabs { padding: 0 20px; }
+          .ledger-body { padding: 22px 20px 8px; }
+          .rows-wrap { padding: 16px 20px 8px; }
+          .research-wrap { padding: 20px 20px 8px; }
+          .footer { padding: 18px 20px 24px; }
+          .ledger-row { grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; padding: 12px 4px; }
+          .ledger-row .row-fee { grid-column: 2 / -1; text-align: left; }
+          .out-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 12px 4px; }
+          .out-row .out-kind { grid-row: 2; justify-self: start; }
+          .amount-input, .amount-prefix { font-size: 30px; }
+          .row-amount, .out-usd { font-size: 17px; }
+        }
+
+        .cmp-wrap { padding: 26px 44px 10px; }
+        .cmp-row {
+          display: grid; grid-template-columns: minmax(0,1fr) 190px;
+          gap: 18px; align-items: baseline; padding: 16px 12px;
+          border-bottom: 1px solid var(--rule);
+        }
+        .cmp-row.best { box-shadow: inset 2px 0 0 var(--teal); }
+        .cmp-dest { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 600; margin: 0; }
+        .cmp-via { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 8px; }
+        .cmp-bar { height: 7px; background: var(--paper-deep); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+        .cmp-fill { height: 100%; background: var(--teal); }
+        .cmp-fill.hi { background: var(--stamp); }
+        .cmp-amt { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 600; text-align: right; margin: 0; font-variant-numeric: tabular-nums; }
+        .cmp-lost { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); text-align: right; margin: 2px 0 0; }
+        @media (max-width: 760px) {
+          .cmp-wrap { padding: 20px 20px 8px; }
+          .cmp-row { grid-template-columns: minmax(0,1fr) auto; gap: 12px; padding: 14px 4px; }
+          .cmp-amt { font-size: 17px; }
+        }
       `}</style>
 
       <div className="ledger-header">
-        <p className="ledger-eyebrow">{corridor === 'c1' ? 'Corridor 01 · United States → Uganda' : 'Corridor 02 · Uganda → United States'}</p>
+        <p className="ledger-eyebrow">{corridor === 'c1' ? 'Corridor 01 · United States → Uganda' : corridor === 'c3' ? 'All corridors · sending out of Uganda' : `Corridor 02 · Uganda \u2192 ${destInfo.name}`}</p>
         <h1 className="ledger-title">Remittance Ledger</h1>
         <p className="ledger-sub">
           {corridor === 'c1'
@@ -848,7 +1023,10 @@ export default function RemittanceLedger() {
           US → Uganda
         </button>
         <button className={'corridor-tab' + (corridor === 'c2' ? ' active' : '')} onClick={() => setCorridor('c2')}>
-          Uganda → US
+          Uganda → world
+        </button>
+        <button className={'corridor-tab' + (corridor === 'c3' ? ' active' : '')} onClick={() => setCorridor('c3')}>
+          Compare corridors
         </button>
       </div>
 
@@ -1028,10 +1206,19 @@ export default function RemittanceLedger() {
             Field-verified in Kampala, July 2026.
           </p>
 
-          <p className="research-section-title">What arrives in the US</p>
+          <div className="dest-row">
+            <span className="dest-label">Sending from Uganda to</span>
+            <select className="dest-select" value={dest} onChange={e => setDest(e.target.value)}>
+              {DESTINATIONS.map(d => (
+                <option key={d.code} value={d.code}>{d.name}{d.mapped ? '' : ' \u2014 pricing pending'}</option>
+              ))}
+            </select>
+          </div>
+
+          <p className="research-section-title">{destInfo.mapped ? `What arrives in ${destInfo.name}` : 'What we know so far'}</p>
 
           <div className="out-calc">
-            <div className="amount-row" style={{ marginTop: '6px' }}>
+            {destInfo.mapped && <div className="amount-row" style={{ marginTop: '6px' }}>
               <span className="amount-label">Send</span>
               <div className="amount-input-wrap">
                 <input
@@ -1044,24 +1231,24 @@ export default function RemittanceLedger() {
                 />
                 <span className="amount-prefix" style={{ fontSize: '20px', marginLeft: '6px', marginRight: 0 }}>UGX</span>
               </div>
-            </div>
+            </div>}
 
-            <div className="method-row" style={{ marginTop: '12px', marginBottom: '10px' }}>
+            {destInfo.mapped && <div className="method-row" style={{ marginTop: '12px', marginBottom: '10px' }}>
               <button className={'method-btn' + (funding === 'mobile' ? ' active' : '')} onClick={() => setFunding('mobile')}>
                 From mobile money
               </button>
               <button className={'method-btn' + (funding === 'bank' ? ' active' : '')} onClick={() => setFunding('bank')}>
                 From bank
               </button>
-            </div>
+            </div>}
 
-            <p className="research-sub" style={{ margin: '0 0 10px' }}>
+            {destInfo.mapped && <p className="research-sub" style={{ margin: '0 0 10px' }}>
               {funding === 'mobile'
                 ? 'Instant, but loading a wallet from MTN or Airtel carries a deposit fee — Chipper charges 2.5%, Eversend a flat 37,103 UGX plus 0.49%. Counters take cash, so they are unaffected.'
-                : 'Bank deposits carry no platform fee on either app \u2014 Chipper from Absa or Stanbic, Eversend from Stanbic \u2014 but take 1\u20132 days to clear. Counters take cash and are unaffected.'}
-            </p>
+                : 'Bank deposits carry no platform fee on either app \u2014 Chipper from Absa or Stanbic, Eversend from Stanbic \u2014 but take 1\u20132 days to clear. Counters and telco menus take cash or wallet balance directly and are unaffected.'}
+            </p>}
 
-            <div className="preset-row" style={{ marginBottom: '14px' }}>
+            {destInfo.mapped && <div className="preset-row" style={{ marginBottom: '14px' }}>
               {UGX_PRESETS.map(p => (
                 <button
                   key={p}
@@ -1071,16 +1258,17 @@ export default function RemittanceLedger() {
                   {fmtUGXShort(p)}
                 </button>
               ))}
-            </div>
+            </div>}
 
-            {OUT_ROUTES
+            {destInfo.mapped && (OUT_ROUTES[dest] || []).length > 0 ? (OUT_ROUTES[dest])
               .map(r => {
                 const amt = Number(outUGX) || 0;
                 const fn = funding === 'bank' ? r.fundBank : r.fundMobile;
                 const unverified = fn === null;
                 const fundFee = unverified ? 0 : fn(amt);
                 const usd = Math.max(amt - fundFee, 0) / r.effRate;
-                const lost = amt > 0 && midRate > 0 ? (1 - usd / (amt / midRate)) * 100 : 0;
+                const ref = destMid || midRate;
+                const lost = amt > 0 && ref > 0 ? (1 - usd / (amt / ref)) * 100 : 0;
                 return { ...r, usd, lost, fundFee, unverified };
               })
               .sort((a, b) => (a.unverified === b.unverified ? b.usd - a.usd : a.unverified ? 1 : -1))
@@ -1096,7 +1284,7 @@ export default function RemittanceLedger() {
                       <p className="out-lost" style={{ margin: 0 }}>not verified</p>
                     ) : (
                       <>
-                        <p className="out-usd" style={{ margin: 0 }}>{fmtUSD(r.usd)}</p>
+                        <p className="out-usd" style={{ margin: 0 }}>{fmtDest(r.usd, destInfo)}</p>
                         <p className="out-lost" style={{ margin: 0 }}>
                           {r.lost.toFixed(1)}% lost
                           {r.fundFee > 0 && <><br />{'\u2212'}{fmtUGX(r.fundFee)} to fund</>}
@@ -1105,13 +1293,43 @@ export default function RemittanceLedger() {
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+              <div className="pending-card">
+                <p className="pending-title">{destInfo.name}: rails known, pricing not yet collected</p>
+                {MENU_AVAILABILITY[dest] && (
+                  <>
+                    <p className="pending-line"><span className="pending-key">MTN MoMo:</span> {MENU_AVAILABILITY[dest].mtn}</p>
+                    <p className="pending-line"><span className="pending-key">Airtel Money:</span> {MENU_AVAILABILITY[dest].airtel}</p>
+                    <p className="pending-line" style={{ marginTop: '8px' }}>{MENU_AVAILABILITY[dest].note}</p>
+                  </>
+                )}
+                <p className="pending-line" style={{ marginTop: '10px' }}>
+                  {destMid
+                    ? `Mid-market reference today: 1 ${destInfo.cur} \u2248 ${Math.round(destMid).toLocaleString('en-US')} UGX.`
+                    : 'Mid-market reference unavailable right now.'}{' '}
+                  Sent from Uganda to {destInfo.name} recently?{' '}
+                  <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>
+                    Send the numbers
+                  </a>{' '}and this corridor gets mapped sooner.
+                </p>
+              </div>
+            )}
 
-            <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
-              Rates verified by hand in Kampala, July 2026 — fees and FX bundled into one effective rate,
+            {destInfo.mapped && COUNTERS_PENDING.includes(dest) && (
+              <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
+                <strong style={{ color: 'var(--ink)' }}>Not yet quoted for this corridor:</strong> the Western Union
+                and MoneyGram agent counters. They are the default option most people reach for, so treat this
+                ranking as covering the app and telco routes only until those are collected.
+                {dest === 'UK' && ' The GBP mid-market rate also moved about 3% across sources on the day these were checked, so the UK percentages carry a wider error bar than the rest of the map.'}
+                {dest === 'EU' && ' MTN quotes this corridor through Thunes and warns the markup can reach 5% on volatile days, so treat the EU figures as a snapshot of a moving number rather than a standing rate.'}
+              </p>
+            )}
+
+            {destInfo.mapped && <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
+              Rates verified by hand in Kampala, {dest === 'US' ? 'July' : 'August'} 2026 — fees and FX bundled into one effective rate,
               calibrated to real 2,000,000 UGX quotes. "% lost" is measured against today's live mid-market rate,
               so it moves as the shilling moves. Agent quotes vary by bureau. Confirm before you send.
-            </p>
+            </p>}
           </div>
 
           <p className="research-section-title">The rails, checked one by one</p>
@@ -1241,6 +1459,75 @@ export default function RemittanceLedger() {
         </div>
       )}
 
+      {corridor === 'c3' && (
+        <div className="cmp-wrap">
+          <p className="research-headline" style={{ marginBottom: '4px' }}>
+            The same 2 million shillings buys very different amounts depending on where it lands.
+          </p>
+          <p className="research-sub">
+            Best available route per corridor, hand-verified in Kampala. Kenya costs roughly a third of what
+            Britain does for an identical transfer \u2014 the destination sets the price far more than the provider does.
+          </p>
+
+          <div className="amount-row" style={{ marginTop: '10px' }}>
+            <span className="amount-label">Send</span>
+            <div className="amount-input-wrap">
+              <input
+                className="amount-input"
+                type="number"
+                min="0"
+                style={{ width: '190px' }}
+                value={outUGX}
+                onChange={e => setOutUGX(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <span className="amount-prefix" style={{ marginLeft: '6px', marginRight: 0 }}>UGX</span>
+            </div>
+          </div>
+
+          <div className="preset-row" style={{ marginBottom: '10px' }}>
+            {UGX_PRESETS.map(p => (
+              <button key={p} className={'preset-btn' + (Number(outUGX) === p ? ' active' : '')} onClick={() => setOutUGX(p)}>
+                {fmtUGXShort(p)}
+              </button>
+            ))}
+          </div>
+
+          <div className="method-row" style={{ marginBottom: '18px' }}>
+            <button className={'method-btn' + (funding === 'mobile' ? ' active' : '')} onClick={() => setFunding('mobile')}>
+              From mobile money
+            </button>
+            <button className={'method-btn' + (funding === 'bank' ? ' active' : '')} onClick={() => setFunding('bank')}>
+              From bank
+            </button>
+          </div>
+
+          {comparison.map((c, i) => (
+            <div key={c.code} className={'cmp-row' + (i === 0 ? ' best' : '')}>
+              <div>
+                <p className="cmp-dest">{c.name}</p>
+                <p className="cmp-via">cheapest via {c.best.name}</p>
+                <div className="cmp-bar">
+                  <div
+                    className={'cmp-fill' + (c.lost >= 6 ? ' hi' : '')}
+                    style={{ width: Math.min(Math.max(c.lost, 0) / 10 * 100, 100) + '%' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="cmp-amt">{fmtDest(c.best.got, c)}</p>
+                <p className="cmp-lost">{c.lost.toFixed(1)}% lost</p>
+              </div>
+            </div>
+          ))}
+
+          <p className="research-sub" style={{ marginTop: '14px' }}>
+            Bars are scaled to a 10% loss. Canada is absent because MTN will not quote a rate until recipient
+            bank details are entered \u2014 you cannot price that corridor before committing to it. Agent counter
+            quotes are still missing outside the US corridor, so these are the app and telco routes only.
+          </p>
+        </div>
+      )}
+
       <div className="footer">
         {corridor === 'c1' && (
           <button className="edit-toggle" onClick={() => setEditing(e => !e)}>
@@ -1339,7 +1626,7 @@ export default function RemittanceLedger() {
 function FragmentRow({ p, update }) {
   return (
     <>
-      <span style={{ fontFamily: "'Fraunces', serif", fontSize: '12px', fontWeight: 600 }}>{p.name}</span>
+      <span style={{ fontFamily: "'IBM Plex Serif', Georgia, serif", fontSize: '12px', fontWeight: 600 }}>{p.name}</span>
       <input
         type="number"
         step="0.01"
