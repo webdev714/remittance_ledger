@@ -46,6 +46,44 @@ const DESTINATIONS = [
   { code: 'EU', name: 'Euro area',      cur: 'EUR', sym: '\u20AC', mapped: true  },
 ];
 
+// URL routing. Each corridor gets its own path so it can be linked, shared and indexed.
+const ROUTES = [
+  { path: '/',                corridor: 'c1', dest: 'US',
+    title: 'Send money US to Uganda: real fees compared | Remittance Ledger',
+    desc: 'What your recipient in Uganda actually receives after fees and exchange-rate markups. Every provider checked by hand in Kampala. Free, no signup.' },
+  { path: '/us-to-uganda',    corridor: 'c1', dest: 'US',
+    title: 'Send money US to Uganda: real fees compared | Remittance Ledger',
+    desc: 'What your recipient in Uganda actually receives after fees and exchange-rate markups. Every provider checked by hand in Kampala. Free, no signup.' },
+  { path: '/uganda-to-us',    corridor: 'c2', dest: 'US',
+    title: 'Send money Uganda to USA: what it actually costs | Remittance Ledger',
+    desc: 'Almost every route from Uganda to America ends at a counter. Two apps do it from your phone. Hand-verified field research from Kampala.' },
+  { path: '/uganda-to-kenya', corridor: 'c2', dest: 'KE',
+    title: 'Send money Uganda to Kenya: cheapest routes compared | Remittance Ledger',
+    desc: 'Eversend, Airtel, MTN and Chipper compared for Uganda to Kenya transfers. The cheapest corridor out of Uganda at roughly 2%. Verified by hand.' },
+  { path: '/uganda-to-uk',    corridor: 'c2', dest: 'UK',
+    title: 'Send money Uganda to UK: real costs compared | Remittance Ledger',
+    desc: 'Uganda to Britain is one of the most expensive corridors out of Uganda. Eversend and MTN via Juba Express compared, hand-verified in Kampala.' },
+  { path: '/uganda-to-uae',   corridor: 'c2', dest: 'AE',
+    title: 'Send money Uganda to UAE: the only working route | Remittance Ledger',
+    desc: 'Airtel lists the UAE but returns service not live. MTN via Juba Express is the only quotable route from Uganda to the Emirates.' },
+  { path: '/uganda-to-europe',corridor: 'c2', dest: 'EU',
+    title: 'Send money Uganda to Europe: real fees compared | Remittance Ledger',
+    desc: 'MTN routes Europe through Thunes and will not show a rate until funds are in your wallet. Compared against Eversend, hand-verified in Kampala.' },
+  { path: '/compare',         corridor: 'c3', dest: 'US',
+    title: 'What it costs to send money out of Uganda | Remittance Ledger',
+    desc: 'The same 2 million shillings, five destinations. Kenya costs a third of what Britain does. Hand-verified corridor comparison from Kampala.' },
+];
+
+function routeFor(corridor, dest) {
+  if (corridor === 'c3') return ROUTES.find(r => r.path === '/compare');
+  if (corridor === 'c1') return ROUTES.find(r => r.path === '/us-to-uganda');
+  return ROUTES.find(r => r.corridor === 'c2' && r.dest === dest) || ROUTES[0];
+}
+function routeFromPath(path) {
+  const clean = path.replace(/\/+$/, '') || '/';
+  return ROUTES.find(r => r.path === clean) || ROUTES[0];
+}
+
 // What the telco menus advertise per destination, from the *165# / *185# menu walks.
 // Pricing for unmapped destinations is not yet collected.
 const MENU_AVAILABILITY = {
@@ -187,12 +225,13 @@ function fmtUGX(n) {
 
 export default function RemittanceLedger() {
   const [amount, setAmount] = useState(500);
-  const [corridor, setCorridor] = useState('c1'); // 'c1' US→UG calculator | 'c2' UG→US research
+  const initialRoute = typeof window !== 'undefined' ? routeFromPath(window.location.pathname) : ROUTES[0];
+  const [corridor, setCorridor] = useState(initialRoute.corridor); // 'c1' US→UG calculator | 'c2' UG→US research
   const [mode, setMode] = useState('send'); // 'send' | 'receive'
   const [targetUGX, setTargetUGX] = useState(2000000);
   const [outUGX, setOutUGX] = useState(2000000);
   const [funding, setFunding] = useState('mobile'); // 'mobile' | 'bank'
-  const [dest, setDest] = useState('US');
+  const [dest, setDest] = useState(initialRoute.dest);
   const [fxRates, setFxRates] = useState(null);
   const [showLog, setShowLog] = useState(false);
   const [method, setMethod] = useState('mobile');
@@ -285,6 +324,29 @@ export default function RemittanceLedger() {
           : a.usdNeeded - b.usdNeeded;
       });
   }, [providers, amount, method, midRate, mode, targetUGX, cashOut]);
+
+  // Keep the URL, page title and description in step with the visible corridor.
+  useEffect(() => {
+    const r = routeFor(corridor, dest);
+    if (window.location.pathname !== r.path) {
+      window.history.pushState({ corridor, dest }, '', r.path);
+    }
+    document.title = r.title;
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute('content', r.desc);
+    const canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) canonical.setAttribute('href', 'https://remittance-ledger.vercel.app' + r.path);
+  }, [corridor, dest]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = routeFromPath(window.location.pathname);
+      setCorridor(r.corridor);
+      setDest(r.dest);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const midFor = (cur) => cur === 'USD'
     ? midRate
