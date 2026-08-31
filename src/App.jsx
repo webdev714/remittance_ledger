@@ -118,67 +118,116 @@ function eversendDeposit(ugx) { return ugx > 0 ? 37103 + 0.0049 * ugx : 0; }
 
 // Uganda → US routes. effRate = UGX surrendered per USD delivered once the money is
 // already in the wallet. fundMobile/fundBank add the cost of getting it there.
+// TODO confirm: Eversend's public site. Left as a constant so it is changed in one place.
+const EVERSEND_URL = 'https://eversend.co';
+
+// Providers running a publisher affiliate programme we've joined. Marked openly on every
+// row. Ranking is computed from verified rates and ignores this list entirely — the
+// cheapest routes on this map (Eversend, Chipper, LemFi) pay nothing.
+const AFFILIATE_PARTNERS = ['Wise', 'Remitly', 'WorldRemit'];
+
+// When each corridor's rates were last re-checked by hand. The site grades itself on these:
+// past 35 days it warns, past 60 it says the numbers should not be trusted. Update these
+// whenever a corridor is re-verified — they are the only thing keeping the map honest.
+const VERIFIED = {
+  US: '2026-07-27',
+  KE: '2026-08-16',
+  UK: '2026-08-18',
+  AE: '2026-08-18',
+  EU: '2026-08-17',
+};
+const FRESH_DAYS = 35;
+const STALE_DAYS = 60;
+
+function daysSince(dateStr) {
+  const then = new Date(dateStr + 'T00:00:00');
+  return Math.floor((Date.now() - then.getTime()) / 86400000);
+}
+function freshness(dateStr) {
+  const d = daysSince(dateStr);
+  if (d <= FRESH_DAYS) return { level: 'ok', days: d };
+  if (d <= STALE_DAYS) return { level: 'aging', days: d };
+  return { level: 'stale', days: d };
+}
+const isAffiliate = (name) => AFFILIATE_PARTNERS.includes(name);
+
 const OUT_ROUTES_US = [
   { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal',
     note: 'Binance P2P · scam risk, murky rules · MoMo send charge not modelled',
     fundMobile: () => 0, fundBank: null },
-  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital',
+  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'In-app · US bank or free Chipper tag',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital',
+  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app · US bank · no transfer fee',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter',
+  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter',
+  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
 
 const OUT_ROUTES_KE = [
-  { id: 'ke-ever',   name: 'Eversend',      effRate: 29.56,  kind: 'digital',
+  { id: 'ke-ever',   name: 'Eversend',      effRate: 29.56,  kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 M-Pesa or bank \u00b7 1,989 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'ke-airtel', name: 'Airtel Money',  effRate: 30.36,  kind: 'telco',
+  { id: 'ke-airtel', name: 'Airtel Money',  effRate: 30.36,  kind: 'telco', action: { ussd: '*185#' },
     note: '*185# \u00b7 Airtel Kenya or M-Pesa \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
-  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: 30.50,  kind: 'digital',
+  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: 30.50,  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'Chipper tag only \u2014 no bank or mobile money payout to Kenya',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: 30.70,  kind: 'telco',
+  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: 30.70,  kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Africa mobile networks \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_UK = [
-  { id: 'uk-ever', name: 'Eversend',            effRate: 5250.1, kind: 'digital',
+  { id: 'uk-ever', name: 'Eversend',            effRate: 5250.1, kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer only \u00b7 14,718 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: 5370.0, kind: 'telco',
+  { id: 'uk-wu',   name: 'Western Union',        effRate: 5363.2, kind: 'counter', action: { href: 'https://www.westernunion.com' },
+    note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
+  { id: 'uk-mg',   name: 'MoneyGram',            effRate: 5383.3, kind: 'counter', action: { href: 'https://www.moneygram.com' },
+    note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
+  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: 5370.0, kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 bank transfer only',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_AE = [
-  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: 1067.24, kind: 'telco',
+  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: 1067.24, kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 the only quotable route found \u00b7 Airtel lists the UAE but returns "service not live"',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_EU = [
-  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: 4506.9, kind: 'telco',
+  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: 4506.9, kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Euro banks \u00b7 flat 1,000 UGX network fee up to 5M \u00b7 rate only visible once the funds are in your wallet',
     fundMobile: () => 0, fundBank: null },
-  { id: 'eu-ever', name: 'Eversend',              effRate: 4520.1, kind: 'digital',
+  { id: 'eu-ever', name: 'Eversend',              effRate: 4520.1, kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer \u00b7 better headline rate, but a 13,983 UGX fee on top cancels it out',
     fundMobile: eversendDeposit, fundBank: () => 0 },
 ];
 
+const OUT_ROUTES_AE_EXTRA = [
+  { id: 'ae-wu', name: 'Western Union', effRate: 1081.67, kind: 'counter', action: { href: 'https://www.westernunion.com' },
+    note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
+  { id: 'ae-mg', name: 'MoneyGram',     effRate: 1084.88, kind: 'counter', action: { href: 'https://www.moneygram.com' },
+    note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
+    fundMobile: () => 0, fundBank: () => 0 },
+];
+OUT_ROUTES_AE.push(...OUT_ROUTES_AE_EXTRA);
+
 const OUT_ROUTES = { US: OUT_ROUTES_US, KE: OUT_ROUTES_KE, UK: OUT_ROUTES_UK, AE: OUT_ROUTES_AE, EU: OUT_ROUTES_EU };
 
 // Corridors where the agent counters (Western Union, MoneyGram) have not been quoted yet.
-const COUNTERS_PENDING = ['KE', 'UK', 'AE', 'EU'];
+const COUNTERS_PENDING = ['KE', 'EU'];
 
 function fmtDest(n, d) {
   if (!isFinite(n)) return '\u2014';
@@ -347,6 +396,23 @@ export default function RemittanceLedger() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+
+  const FreshnessBar = ({ code }) => {
+    const date = VERIFIED[code];
+    if (!date) return null;
+    const f = freshness(date);
+    const label = f.level === 'ok'
+      ? `Rates re-checked by hand ${f.days} ${f.days === 1 ? 'day' : 'days'} ago.`
+      : f.level === 'aging'
+        ? `These rates are ${f.days} days old and due a re-check. Treat them as indicative and confirm in the app before sending.`
+        : `These rates are ${f.days} days old. They are past the point where they should be trusted \u2014 confirm every figure with the provider before sending.`;
+    return (
+      <div className={'fresh-bar fresh-' + f.level}>
+        <span className="fresh-dot" />
+        <span>{label} Last verified {formatUpdated(date)}. This map is re-checked monthly.</span>
+      </div>
+    );
+  };
 
   const midFor = (cur) => cur === 'USD'
     ? midRate
@@ -1034,6 +1100,7 @@ export default function RemittanceLedger() {
         .pending-key { color: var(--ink-light); }
 
         @media (max-width: 760px) {
+          .fresh-bar { font-size: 10px; }
           .ledger-header { padding: 22px 20px 18px; }
           .ledger-title { font-size: 26px; }
           .corridor-tabs { padding: 0 20px; }
@@ -1068,6 +1135,44 @@ export default function RemittanceLedger() {
           .cmp-row { grid-template-columns: minmax(0,1fr) auto; gap: 12px; padding: 14px 4px; }
           .cmp-amt { font-size: 17px; }
         }
+
+        .row-action {
+          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em;
+          color: var(--teal); text-decoration: none; border-bottom: 1px dotted var(--teal);
+          padding-bottom: 1px; white-space: nowrap;
+        }
+        .row-action:hover { color: var(--stamp); border-bottom-color: var(--stamp); }
+        .row-ussd {
+          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em;
+          color: var(--ink); background: var(--paper-deep); border: 1px solid var(--rule);
+          border-radius: 2px; padding: 1px 6px; white-space: nowrap;
+        }
+
+        .aff-tag {
+          font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
+          text-transform: uppercase; color: var(--ink-light); border: 1px solid var(--rule);
+          border-radius: 2px; padding: 1px 5px; margin-left: 6px; white-space: nowrap;
+        }
+        .disclosure {
+          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.65;
+          color: var(--ink-light); border: 1px solid var(--rule); border-radius: 3px;
+          background: var(--paper-deep); padding: 11px 13px; margin-top: 14px;
+        }
+        .disclosure strong { color: var(--ink); font-weight: 600; }
+
+        .fresh-bar {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.6;
+          border: 1px solid var(--rule); border-radius: 3px;
+          padding: 8px 11px; margin: 0 0 16px;
+        }
+        .fresh-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+        .fresh-ok     { background: var(--paper-deep); color: var(--ink-light); }
+        .fresh-ok    .fresh-dot { background: #3E7A3E; }
+        .fresh-aging  { background: #FBF3E2; border-color: #D9B45E; color: #7A5A16; }
+        .fresh-aging .fresh-dot { background: #C0902F; }
+        .fresh-stale  { background: #FBEDEB; border-color: #D89A92; color: #8C2F26; }
+        .fresh-stale .fresh-dot { background: var(--stamp); }
       `}</style>
 
       <div className="ledger-header">
@@ -1218,6 +1323,8 @@ export default function RemittanceLedger() {
         )}
       </div>
 
+      <div style={{ padding: '0 44px' }}><FreshnessBar code="US" /></div>
+
       <div className="perforation" />
 
       <div className="rows-wrap">
@@ -1242,7 +1349,7 @@ export default function RemittanceLedger() {
                     {mode === 'send' ? fmtUGX(r.recipientUGX) : fmtUSD(r.usdNeeded)}
                   </p>
                   {cashOut && method === 'mobile' && mode === 'send' && r.cashOutFee > 0 && (
-                    <p className="row-cashout">\u2212{fmtUGX(r.cashOutFee)} to cash out</p>
+                    <p className="row-cashout">−{fmtUGX(r.cashOutFee)} to cash out</p>
                   )}
                 </div>
               </>
@@ -1276,6 +1383,8 @@ export default function RemittanceLedger() {
               ))}
             </select>
           </div>
+
+          {destInfo.mapped && <FreshnessBar code={dest} />}
 
           <p className="research-section-title">{destInfo.mapped ? `What arrives in ${destInfo.name}` : 'What we know so far'}</p>
 
@@ -1339,6 +1448,16 @@ export default function RemittanceLedger() {
                   <div>
                     <p className="out-name">{r.name}</p>
                     <p className="out-note">{r.note}</p>
+                    {r.action && (
+                      <p style={{ margin: '5px 0 0' }}>
+                        {r.action.ussd
+                          ? <span className="row-ussd">Dial {r.action.ussd}</span>
+                          : <>
+                              <a className="row-action" href={r.action.href} target="_blank" rel="noopener noreferrer">Open {r.name} →</a>
+                              {isAffiliate(r.name) && <span className="aff-tag">paid link</span>}
+                            </>}
+                      </p>
+                    )}
                   </div>
                   <span className={'out-kind k-' + r.kind}>{r.kind}</span>
                   <div>
@@ -1528,8 +1647,15 @@ export default function RemittanceLedger() {
           </p>
           <p className="research-sub">
             Best available route per corridor, hand-verified in Kampala. Kenya costs roughly a third of what
-            Britain does for an identical transfer \u2014 the destination sets the price far more than the provider does.
+            Britain does for an identical transfer — the destination sets the price far more than the provider does.
           </p>
+
+          {(() => {
+            const codes = comparison.map(c => c.code).filter(c => VERIFIED[c]);
+            if (!codes.length) return null;
+            const oldest = codes.reduce((a, b) => (daysSince(VERIFIED[a]) > daysSince(VERIFIED[b]) ? a : b));
+            return <FreshnessBar code={oldest} />;
+          })()}
 
           <div className="amount-row" style={{ marginTop: '10px' }}>
             <span className="amount-label">Send</span>
@@ -1584,7 +1710,7 @@ export default function RemittanceLedger() {
 
           <p className="research-sub" style={{ marginTop: '14px' }}>
             Bars are scaled to a 10% loss. Canada is absent because MTN will not quote a rate until recipient
-            bank details are entered \u2014 you cannot price that corridor before committing to it. Agent counter
+            bank details are entered — you cannot price that corridor before committing to it. Agent counter
             quotes are still missing outside the US corridor, so these are the app and telco routes only.
           </p>
         </div>
@@ -1653,6 +1779,15 @@ export default function RemittanceLedger() {
           >
             Send feedback →
           </a>
+        </div>
+
+        <div className="disclosure">
+          <strong>How this is funded.</strong> Links marked <span className="aff-tag">paid link</span> earn a
+          small commission if you sign up through them \u2014 currently Wise, Remitly and WorldRemit. Nothing
+          else on this map pays anything, including every route that currently ranks first: Eversend, Chipper
+          Cash, LemFi, MTN and Airtel all earn me nothing. Rankings are computed from rates verified by hand
+          and re-checked monthly, and the affiliate list has no bearing on them. If a paid provider is the
+          cheapest it is because the numbers say so; if it is not, it is ranked below the ones that are.
         </div>
 
         <div className="share-row">
