@@ -69,12 +69,16 @@ const ROUTES = [
   { path: '/uganda-to-europe',corridor: 'c2', dest: 'EU',
     title: 'Send money Uganda to Europe: real fees compared | Remittance Ledger',
     desc: 'MTN routes Europe through Thunes and will not show a rate until funds are in your wallet. Compared against Eversend, hand-verified in Kampala.' },
+  { path: '/about',           corridor: 'about', dest: 'US',
+    title: 'How this map is made | Remittance Ledger',
+    desc: 'Who built this, how every rate is verified by hand in Kampala, how readers correct it, and how it is funded. The methodology behind the Remittance Ledger.' },
   { path: '/compare',         corridor: 'c3', dest: 'US',
     title: 'What it costs to send money out of Uganda | Remittance Ledger',
     desc: 'The same 2 million shillings, five destinations. Kenya costs a third of what Britain does. Hand-verified corridor comparison from Kampala.' },
 ];
 
 function routeFor(corridor, dest) {
+  if (corridor === 'about') return ROUTES.find(r => r.path === '/about');
   if (corridor === 'c3') return ROUTES.find(r => r.path === '/compare');
   if (corridor === 'c1') return ROUTES.find(r => r.path === '/us-to-uganda');
   return ROUTES.find(r => r.corridor === 'c2' && r.dest === dest) || ROUTES[0];
@@ -1173,10 +1177,32 @@ export default function RemittanceLedger() {
         .fresh-aging .fresh-dot { background: #C0902F; }
         .fresh-stale  { background: #FBEDEB; border-color: #D89A92; color: #8C2F26; }
         .fresh-stale .fresh-dot { background: var(--stamp); }
+
+        .about-wrap { padding: 30px 44px 12px; max-width: 680px; }
+        .about-wrap h2 {
+          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 600;
+          margin: 26px 0 8px;
+        }
+        .about-wrap h2:first-of-type { margin-top: 4px; }
+        .about-wrap p {
+          font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px;
+          line-height: 1.75; margin: 0 0 12px; color: var(--ink);
+        }
+        .about-wrap p.small {
+          font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          line-height: 1.7;
+        }
+        .about-wrap a { color: var(--teal); }
+        .about-lede {
+          font-family: 'IBM Plex Serif', Georgia, serif !important; font-size: 17px !important;
+          line-height: 1.6 !important; font-style: italic; color: var(--ink-light) !important;
+          border-left: 2px solid var(--rule); padding-left: 14px; margin-bottom: 22px !important;
+        }
+        @media (max-width: 760px) { .about-wrap { padding: 22px 20px 10px; } }
       `}</style>
 
       <div className="ledger-header">
-        <p className="ledger-eyebrow">{corridor === 'c1' ? 'Corridor 01 · United States → Uganda' : corridor === 'c3' ? 'All corridors · sending out of Uganda' : `Corridor 02 · Uganda \u2192 ${destInfo.name}`}</p>
+        <p className="ledger-eyebrow">{corridor === 'about' ? 'Methodology · how this map is made' : corridor === 'c1' ? 'Corridor 01 · United States → Uganda' : corridor === 'c3' ? 'All corridors · sending out of Uganda' : `Corridor 02 · Uganda \u2192 ${destInfo.name}`}</p>
         <h1 className="ledger-title">Remittance Ledger</h1>
         <p className="ledger-sub">
           {corridor === 'c1'
@@ -1194,6 +1220,13 @@ export default function RemittanceLedger() {
         </button>
         <button className={'corridor-tab' + (corridor === 'c3' ? ' active' : '')} onClick={() => setCorridor('c3')}>
           Compare corridors
+        </button>
+        <button
+          className={'corridor-tab' + (corridor === 'about' ? ' active' : '')}
+          style={{ marginLeft: 'auto' }}
+          onClick={() => setCorridor('about')}
+        >
+          About
         </button>
       </div>
 
@@ -1712,6 +1745,86 @@ export default function RemittanceLedger() {
             Bars are scaled to a 10% loss. Canada is absent because MTN will not quote a rate until recipient
             bank details are entered — you cannot price that corridor before committing to it. Agent counter
             quotes are still missing outside the US corridor, so these are the app and telco routes only.
+          </p>
+        </div>
+      )}
+
+      {corridor === 'about' && (
+        <div className="about-wrap">
+          <p className="about-lede">
+            My mum is in Kampala. I am usually in the US. For years money moved between us and
+            neither of us knew what we were losing to get it there. This map is the answer to that.
+          </p>
+
+          <h2>What this is</h2>
+          <p>
+            A free comparison of what money actually costs to move between Uganda and five other
+            places. Not the advertised fee \u2014 the amount that lands in someone's hands after the
+            fee, the exchange-rate markup, the cost of loading a wallet, and the cost of taking
+            it out again. Those four things are usually quoted separately, or not at all.
+          </p>
+
+          <h2>How the rates are collected</h2>
+          <p>
+            By hand, in Kampala. I walk into forex bureaus and ask for a quote on 2,000,000
+            shillings. I dial *165# and *185# and step through the menus. I install the apps,
+            register, and take the numbers off the confirmation screen before sending. Where I
+            have sent money myself, I have used my own.
+          </p>
+          <p>
+            Nothing here is scraped from a marketing page, because marketing pages leave out the
+            part that costs you money. Western Union quoting above mid-market, Remitly's rate
+            dropping after your first $500, Chipper charging 2.5% just to load the wallet, MTN
+            refusing to show a rate until the funds are already in your account \u2014 none of that
+            appears anywhere except at the counter or inside the app.
+          </p>
+
+          <h2>How the numbers are calculated</h2>
+          <p>
+            Each route is reduced to one effective rate: the shillings you surrender per unit of
+            currency delivered, with every fee folded in. That figure is compared against the live
+            mid-market rate, fetched fresh each time the page loads. The difference is what you
+            lose. Because the reference rate is live and the quotes are dated, the percentages
+            shift slightly as currencies move \u2014 which is honest, and shows you when a snapshot
+            is going stale.
+          </p>
+          <p className="small">
+            Every corridor carries the date it was last checked. Past 35 days the page says so.
+            Past 60 it tells you not to trust the numbers. The map is re-verified monthly.
+          </p>
+
+          <h2>How it gets corrected</h2>
+          <p>
+            Readers correct it, and the record is public \u2014 there is a log of every change in the
+            footer. Someone caught that Wise had supported mobile money for months while this map
+            said otherwise. Two people named apps I had missed entirely, one of which turned out
+            to be the cheapest route out of Uganda and reversed a conclusion I had already
+            published. Another reported a completed transfer on a corridor I had written off as
+            never having launched.
+          </p>
+          <p>
+            If something here is wrong, tell me and it gets fixed with your name on it.{' '}
+            <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">
+              Send a correction or a quote from your own bureau
+            </a>.
+          </p>
+
+          <h2>How it is funded</h2>
+          <p>
+            Three providers \u2014 Wise, Remitly and WorldRemit \u2014 run affiliate programmes, and links
+            to them are marked <em>paid link</em> wherever they appear. Everything else earns
+            nothing, including every route that currently ranks first on this map. Rankings come
+            from the verified rates and nothing else. If a paid provider is cheapest, it is
+            because the arithmetic says so; where it is not, it sits below the ones that are.
+          </p>
+
+          <h2>What it does not cover</h2>
+          <p className="small">
+            Agent counter quotes are still missing for Kenya and Europe. Canada appears in MTN's
+            menu but cannot be priced, because no rate is shown until recipient bank details are
+            entered. Rates at bureaus vary between branches, so treat counter figures as one
+            sample rather than a standing price. Everything here is an estimate to plan with \u2014
+            confirm the final number with the provider before you send.
           </p>
         </div>
       )}

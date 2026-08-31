@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://remittance-ledger.vercel.app/sitemap.xml
