@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import providerData from './providers.json';
+import rateHistory from './rates-history.json';
 
 const TODAY = '2026-06-22';
 const FALLBACK_MID_RATE = 3645;
@@ -140,6 +141,33 @@ const VERIFIED = {
   AE: '2026-08-18',
   EU: '2026-08-17',
 };
+// Rate readings are append-only. Current values come from the latest entry; once a route
+// has two or more, the site can show which way the cost has moved. Overwriting an entry
+// destroys the only copy of that reading in existence — always append.
+const READINGS = rateHistory.readings || {};
+
+function latestReading(id) {
+  const r = READINGS[id];
+  return r && r.length ? r[r.length - 1] : null;
+}
+function previousReading(id) {
+  const r = READINGS[id];
+  return r && r.length > 1 ? r[r.length - 2] : null;
+}
+// Movement in effective rate between the last two readings. Positive means it got worse.
+function rateMovement(id) {
+  const now = latestReading(id), before = previousReading(id);
+  if (!now || !before || !now.effRate || !before.effRate) return null;
+  const pct = ((now.effRate - before.effRate) / before.effRate) * 100;
+  if (Math.abs(pct) < 0.05) return { pct: 0, since: before.date, flat: true };
+  return { pct, since: before.date, flat: false };
+}
+// Resolve a route's live rate from history, falling back to the value in the definition.
+function resolveRate(id, fallback) {
+  const r = latestReading(id);
+  return r && typeof r.effRate === 'number' ? r.effRate : fallback;
+}
+
 const FRESH_DAYS = 35;
 const STALE_DAYS = 60;
 
@@ -156,73 +184,73 @@ function freshness(dateStr) {
 const isAffiliate = (name) => AFFILIATE_PARTNERS.includes(name);
 
 const OUT_ROUTES_US = [
-  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: 3770.0,  kind: 'informal',
+  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: resolveRate('p2p', 3770.0),  kind: 'informal',
     note: 'Binance P2P · scam risk, murky rules · MoMo send charge not modelled',
     fundMobile: () => 0, fundBank: null },
-  { id: 'chipper',  name: 'Chipper Cash',      effRate: 3802.5,  kind: 'digital', action: { href: 'https://chippercash.com' },
+  { id: 'chipper',  name: 'Chipper Cash',      effRate: resolveRate('chipper', 3802.5),  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'In-app · US bank or free Chipper tag',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'eversend', name: 'Eversend',          effRate: 3843.93, kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'eversend', name: 'Eversend',          effRate: resolveRate('eversend', 3843.93), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app · US bank · no transfer fee',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'mg-out',   name: 'MoneyGram',         effRate: 3883.5,  kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'mg-out',   name: 'MoneyGram',         effRate: resolveRate('mg-out', 3883.5),  kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'wu-out',   name: 'Western Union',     effRate: 3921.6,  kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'wu-out',   name: 'Western Union',     effRate: resolveRate('wu-out', 3921.6),  kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
 
 const OUT_ROUTES_KE = [
-  { id: 'ke-ever',   name: 'Eversend',      effRate: 29.56,  kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'ke-ever',   name: 'Eversend',      effRate: resolveRate('ke-ever', 29.56),  kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 M-Pesa or bank \u00b7 1,989 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'ke-airtel', name: 'Airtel Money',  effRate: 30.36,  kind: 'telco', action: { ussd: '*185#' },
+  { id: 'ke-airtel', name: 'Airtel Money',  effRate: resolveRate('ke-airtel', 30.36),  kind: 'telco', action: { ussd: '*185#' },
     note: '*185# \u00b7 Airtel Kenya or M-Pesa \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
-  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: 30.50,  kind: 'digital', action: { href: 'https://chippercash.com' },
+  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: resolveRate('ke-chip', 30.50),  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'Chipper tag only \u2014 no bank or mobile money payout to Kenya',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: 30.70,  kind: 'telco', action: { ussd: '*165#' },
+  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: resolveRate('ke-mtn', 30.70),  kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Africa mobile networks \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_UK = [
-  { id: 'uk-ever', name: 'Eversend',            effRate: 5250.1, kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'uk-ever', name: 'Eversend',            effRate: resolveRate('uk-ever', 5250.1), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer only \u00b7 14,718 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'uk-wu',   name: 'Western Union',        effRate: 5363.2, kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'uk-wu',   name: 'Western Union',        effRate: resolveRate('uk-wu', 5363.2), kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'uk-mg',   name: 'MoneyGram',            effRate: 5383.3, kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'uk-mg',   name: 'MoneyGram',            effRate: resolveRate('uk-mg', 5383.3), kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: 5370.0, kind: 'telco', action: { ussd: '*165#' },
+  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: resolveRate('uk-juba', 5370.0), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 bank transfer only',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_AE = [
-  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: 1067.24, kind: 'telco', action: { ussd: '*165#' },
+  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: resolveRate('ae-juba', 1067.24), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 the only quotable route found \u00b7 Airtel lists the UAE but returns "service not live"',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_EU = [
-  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: 4506.9, kind: 'telco', action: { ussd: '*165#' },
+  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: resolveRate('eu-mtn', 4506.9), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Euro banks \u00b7 flat 1,000 UGX network fee up to 5M \u00b7 rate only visible once the funds are in your wallet',
     fundMobile: () => 0, fundBank: null },
-  { id: 'eu-ever', name: 'Eversend',              effRate: 4520.1, kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'eu-ever', name: 'Eversend',              effRate: resolveRate('eu-ever', 4520.1), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer \u00b7 better headline rate, but a 13,983 UGX fee on top cancels it out',
     fundMobile: eversendDeposit, fundBank: () => 0 },
 ];
 
 const OUT_ROUTES_AE_EXTRA = [
-  { id: 'ae-wu', name: 'Western Union', effRate: 1081.67, kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'ae-wu', name: 'Western Union', effRate: resolveRate('ae-wu', 1081.67), kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'ae-mg', name: 'MoneyGram',     effRate: 1084.88, kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'ae-mg', name: 'MoneyGram',     effRate: resolveRate('ae-mg', 1084.88), kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
@@ -1503,6 +1531,15 @@ export default function RemittanceLedger() {
                           {r.lost.toFixed(1)}% lost
                           {r.fundFee > 0 && <><br />{'\u2212'}{fmtUGX(r.fundFee)} to fund</>}
                         </p>
+                        {(() => {
+                          const mv = rateMovement(r.id);
+                          if (!mv) return null;
+                          const cls = mv.flat ? 'move-flat' : mv.pct > 0 ? 'move-worse' : 'move-better';
+                          const txt = mv.flat
+                            ? 'unchanged since ' + formatUpdated(mv.since)
+                            : (mv.pct > 0 ? '\u2191 ' : '\u2193 ') + Math.abs(mv.pct).toFixed(1) + '% since ' + formatUpdated(mv.since);
+                          return <p className={'rate-move ' + cls}>{txt}</p>;
+                        })()}
                       </>
                     )}
                   </div>
@@ -1791,6 +1828,13 @@ export default function RemittanceLedger() {
           <p className="small">
             Every corridor carries the date it was last checked. Past 35 days the page says so.
             Past 60 it tells you not to trust the numbers. The map is re-verified monthly.
+          </p>
+          <p>
+            Nothing is overwritten. Every reading is kept with the date it was taken, so the record
+            grows rather than being replaced. Once a route has been checked twice, the page shows
+            which way the cost has moved. Over time that becomes something that cannot be
+            reconstructed after the fact — a running account of what these corridors actually
+            charged, month by month.
           </p>
 
           <h2>How it gets corrected</h2>

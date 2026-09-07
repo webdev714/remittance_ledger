@@ -1,0 +1,39 @@
+{
+  "_comment": "Append-only record of every rate reading. NEVER overwrite an entry — add a new one with today's date. The site derives current rates from the most recent reading per route, and shows movement once a route has two or more. This file is the project's actual asset: nobody can go back and re-collect a bureau quote from a month that has passed.",
+  "_howToUpdate": "When you re-verify a corridor, push a new object onto that route's array: { \"date\": \"YYYY-MM-DD\", \"effRate\": <number> }. For corridor 01 providers use { \"date\": ..., \"flatFee\": ..., \"percentFee\": ..., \"fxMarkup\": ... }. Then update VERIFIED in App.jsx to the same date.",
+
+  "readings": {
+    "p2p":      [{ "date": "2026-07-27", "effRate": 3770.0 }],
+    "chipper":  [{ "date": "2026-07-27", "effRate": 3802.5 }],
+    "eversend": [{ "date": "2026-07-27", "effRate": 3843.93 }],
+    "mg-out":   [{ "date": "2026-07-27", "effRate": 3883.5 }],
+    "wu-out":   [{ "date": "2026-07-27", "effRate": 3921.6 }],
+
+    "ke-ever":   [{ "date": "2026-08-16", "effRate": 29.56 }],
+    "ke-airtel": [{ "date": "2026-08-16", "effRate": 30.36 }],
+    "ke-chip":   [{ "date": "2026-08-16", "effRate": 30.50 }],
+    "ke-mtn":    [{ "date": "2026-08-16", "effRate": 30.70 }],
+
+    "uk-ever": [{ "date": "2026-08-17", "effRate": 5250.1 }],
+    "uk-wu":   [{ "date": "2026-08-18", "effRate": 5363.2 }],
+    "uk-juba": [{ "date": "2026-08-17", "effRate": 5370.0 }],
+    "uk-mg":   [{ "date": "2026-08-18", "effRate": 5383.3 }],
+
+    "ae-juba": [{ "date": "2026-08-17", "effRate": 1067.24 }],
+    "ae-wu":   [{ "date": "2026-08-18", "effRate": 1081.67 }],
+    "ae-mg":   [{ "date": "2026-08-18", "effRate": 1084.88 }],
+
+    "eu-mtn":  [{ "date": "2026-08-17", "effRate": 4506.9 }],
+    "eu-ever": [{ "date": "2026-08-17", "effRate": 4520.1 }],
+
+    "wu":       [{ "date": "2026-07-10", "flatFee": 0,    "percentFee": 0,   "fxMarkup": -3.0 }],
+    "mg":       [{ "date": "2026-07-10", "flatFee": 1.99, "percentFee": 0,   "fxMarkup": 0.15 }],
+    "wise":     [{ "date": "2026-07-10", "flatFee": 1.60, "percentFee": 1.6, "fxMarkup": 0 }],
+    "remitly":  [{ "date": "2026-07-10", "flatFee": 2.99, "percentFee": 0,   "fxMarkup": 2.4 }],
+    "worldrem": [{ "date": "2026-07-10", "flatFee": 0,    "percentFee": 0,   "fxMarkup": 1.5 }],
+    "sendwave": [{ "date": "2026-07-10", "flatFee": 0,    "percentFee": 0,   "fxMarkup": 1.5 }],
+    "lemfi":    [{ "date": "2026-07-10", "flatFee": 0,    "percentFee": 0,   "fxMarkup": 0.1 }],
+    "nala":     [{ "date": "2026-07-10", "flatFee": 0,    "percentFee": 0,   "fxMarkup": 1.0 }],
+    "eversend-in": [{ "date": "2026-07-27", "flatFee": 0.27, "percentFee": 0, "fxMarkup": -0.16 }]
+  }
+}
