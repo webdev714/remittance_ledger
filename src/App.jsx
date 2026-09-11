@@ -11,7 +11,7 @@ const PRESETS = [50, 100, 200, 500, 1000];
 const UGX_PRESETS = [500000, 1000000, 2000000, 3500000, 5000000];
 
 // Uganda mobile money cash-out cost: 0.5% government withdrawal levy plus a tiered
-// agent fee. Tiers below are approximate and vary by network and agent — treat as an
+// agent fee. Tiers below are approximate and vary by network and agent. Treat as an
 // estimate, not a quote. Verified against published MTN/Airtel tariff bands, Jul 2026.
 const WITHDRAWAL_LEVY = 0.005;
 const AGENT_FEE_TIERS = [
@@ -127,15 +127,17 @@ function eversendDeposit(ugx) { return ugx > 0 ? 37103 + 0.0049 * ugx : 0; }
 const EVERSEND_URL = 'https://eversend.co';
 
 // Providers running a publisher affiliate programme we've joined. Marked openly on every
-// row. Ranking is computed from verified rates and ignores this list entirely — the
+// row. Ranking is computed from verified rates and ignores this list entirely. The
 // cheapest routes on this map (Eversend, Chipper, LemFi) pay nothing.
-const AFFILIATE_PARTNERS = ['Wise', 'Remitly', 'WorldRemit'];
+// Only providers we have actually been accepted into. WorldRemit declined;
+// Remitly is pending. Add a name here only once the programme is live.
+const AFFILIATE_PARTNERS = ['Wise'];
 
 // When each corridor's rates were last re-checked by hand. The site grades itself on these:
 // past 35 days it warns, past 60 it says the numbers should not be trusted. Update these
-// whenever a corridor is re-verified — they are the only thing keeping the map honest.
+// whenever a corridor is re-verified. They are the only thing keeping the map honest.
 const VERIFIED = {
-  US: '2026-07-27',
+  US: '2026-09-08',
   KE: '2026-08-16',
   UK: '2026-08-18',
   AE: '2026-08-18',
@@ -143,7 +145,7 @@ const VERIFIED = {
 };
 // Rate readings are append-only. Current values come from the latest entry; once a route
 // has two or more, the site can show which way the cost has moved. Overwriting an entry
-// destroys the only copy of that reading in existence — always append.
+// destroys the only copy of that reading in existence. Always append.
 const READINGS = rateHistory.readings || {};
 
 function latestReading(id) {
@@ -290,10 +292,10 @@ const METHODS = [
 // Every change readers have forced. The map is only as good as its corrections.
 const CORRECTIONS = [
   { date: '2026-07-04', who: 'u/moistandwarm1', what: 'Wise had been marked as not offering mobile money to Uganda. It had supported it for months. Corrected, with the 5,000,000 UGX per-transfer cap added.' },
-  { date: '2026-07-11', who: 'u/brygad', what: 'Pointed out that people walk into banks asking the reverse question — "what do I send so they receive exactly X?" Built the "They need" mode because of this comment.' },
+  { date: '2026-07-11', who: 'u/brygad', what: 'Pointed out that people walk into banks asking the reverse question: "what do I send so they receive exactly X?" Built the "They need" mode because of this comment.' },
   { date: '2026-07-27', who: 'u/Long-Definition7091', what: 'Named Eversend, which the Uganda→US research had missed entirely. It works: no fee, roughly 4.4% below mid-market. It changed the conclusion of the published findings.' },
-  { date: '2026-07-27', who: 'u/Available-Way-8534', what: 'Flagged Chipper Cash as fast but weak on rates. Verified: about 3.5% all-in — which makes it the cheapest formal route on the map. The rate criticism was accurate.' },
-  { date: '2026-07-27', who: 'u/Feeling_Abrocoma502', what: 'Suggested Dahabshiil. Checked it — Uganda is not a sender country in their app. Mapped as a dead end rather than dropped.' },
+  { date: '2026-07-27', who: 'u/Available-Way-8534', what: 'Flagged Chipper Cash as fast but weak on rates. Verified: about 3.5% all-in, which makes it the cheapest formal route on the map. The rate criticism was accurate.' },
+  { date: '2026-07-27', who: 'u/Feeling_Abrocoma502', what: 'Suggested Dahabshiil. Checked it: Uganda is not a sender country in their app. Mapped as a dead end rather than dropped.' },
   { date: '2026-07-28', who: 'u/ParticularAd1705', what: 'Reported a completed Uganda→UK transfer via Airtel Money in September 2025. That corridor was live and has since gone dark, rather than never having launched. Finding rewritten.' },
 ];
 
@@ -321,7 +323,18 @@ export default function RemittanceLedger() {
   // 'checking' while we fetch, 'live' if the API answered, 'fallback' if it
   // didn't, 'manual' once the user edits the rate themselves.
   const [rateSource, setRateSource] = useState('checking');
-  const [providers, setProviders] = useState(DEFAULT_PROVIDERS);
+  const [providers, setProviders] = useState(() => DEFAULT_PROVIDERS.map(p => {
+    const r = latestReading(p.id === 'eversend' ? 'eversend-in' : p.id);
+    if (!r || typeof r.fxMarkup !== 'number') return p;
+    return {
+      ...p,
+      flatFee: typeof r.flatFee === 'number' ? r.flatFee : p.flatFee,
+      percentFee: typeof r.percentFee === 'number' ? r.percentFee : p.percentFee,
+      fxMarkup: r.fxMarkup,
+      fxMarkupByMethod: r.fxMarkupByMethod || null,
+      lastUpdated: r.date,
+    };
+  }));
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -377,7 +390,11 @@ export default function RemittanceLedger() {
         const available = p[method];
         const totalFeeUSD = p.flatFee + amt * (p.percentFee / 100);
         const netUSD = Math.max(amt - totalFeeUSD, 0);
-        const effectiveRate = midRate * (1 - p.fxMarkup / 100);
+        // Some providers price the exchange rate differently per payout method.
+        // Western Union's bank deposit rate is 13 points worse than its mobile money rate.
+        const byMethod = p.fxMarkupByMethod && p.fxMarkupByMethod[method];
+        const markup = typeof byMethod === 'number' ? byMethod : p.fxMarkup;
+        const effectiveRate = midRate * (1 - markup / 100);
         const walletUGX = netUSD * effectiveRate;
         const applyCashOut = cashOut && method === 'mobile';
         const cashOutFee = applyCashOut ? cashOutCost(walletUGX) : 0;
@@ -434,14 +451,14 @@ export default function RemittanceLedger() {
     if (!date) return null;
     const f = freshness(date);
     const label = f.level === 'ok'
-      ? `Rates re-checked by hand ${f.days} ${f.days === 1 ? 'day' : 'days'} ago.`
+      ? `Checked ${f.days} ${f.days === 1 ? 'day' : 'days'} ago.`
       : f.level === 'aging'
-        ? `These rates are ${f.days} days old and due a re-check. Treat them as indicative and confirm in the app before sending.`
-        : `These rates are ${f.days} days old. They are past the point where they should be trusted \u2014 confirm every figure with the provider before sending.`;
+        ? `${f.days} days old and due a re-check. Confirm in the app before sending.`
+        : `${f.days} days old. Don't trust these without checking first.`;
     return (
       <div className={'fresh-bar fresh-' + f.level}>
         <span className="fresh-dot" />
-        <span>{label} Last verified {formatUpdated(date)}. This map is re-checked monthly.</span>
+        <span>{label} Last verified {formatUpdated(date)}.</span>
       </div>
     );
   };
@@ -535,6 +552,7 @@ export default function RemittanceLedger() {
         .ledger-title {
           font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 34px;
+          font-weight: 400;
           letter-spacing: -0.015em;
           font-weight: 600;
           margin: 0;
@@ -728,7 +746,7 @@ export default function RemittanceLedger() {
         .row-name {
           font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 17px;
-          font-weight: 600;
+          font-weight: 500;
           margin: 0;
         }
         .row-meta {
@@ -977,7 +995,7 @@ export default function RemittanceLedger() {
         .research-headline {
           font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 19px;
-          font-weight: 600;
+          font-weight: 400;
           line-height: 1.4;
           margin: 0 0 6px;
         }
@@ -1000,7 +1018,7 @@ export default function RemittanceLedger() {
         .rail-name {
           font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 15px;
-          font-weight: 600;
+          font-weight: 500;
           margin: 0;
         }
         .rail-note {
@@ -1034,7 +1052,7 @@ export default function RemittanceLedger() {
         .quote-title {
           font-family: 'IBM Plex Serif', Georgia, serif;
           font-size: 15px;
-          font-weight: 700;
+          font-weight: 500;
           margin: 0 0 6px;
         }
         .quote-line {
@@ -1066,7 +1084,7 @@ export default function RemittanceLedger() {
           border-radius: 3px;
         }
         .out-row.best { background: var(--good-bg); }
-        .out-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 600; margin: 0; }
+        .out-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 500; margin: 0; }
         .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 0; }
         .out-kind {
           font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
@@ -1113,7 +1131,7 @@ export default function RemittanceLedger() {
         .dest-row { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
         .dest-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); }
         .dest-select {
-          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 600; color: var(--ink);
+          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 23px; font-weight: 400; color: var(--ink);
           background: transparent; border: none; border-bottom: 2px solid var(--ink);
           padding: 2px 20px 2px 2px; cursor: pointer; outline: none;
           appearance: none; -webkit-appearance: none;
@@ -1125,7 +1143,7 @@ export default function RemittanceLedger() {
           border: 1px dashed var(--rule); border-radius: 4px; background: var(--paper-deep);
           padding: 16px 18px; margin: 6px 0 20px;
         }
-        .pending-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+        .pending-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 16px; font-weight: 500; margin: 0 0 8px; }
         .pending-line {
           font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.7; margin: 0 0 4px;
         }
@@ -1155,7 +1173,7 @@ export default function RemittanceLedger() {
           border-bottom: 1px solid var(--rule);
         }
         .cmp-row.best { box-shadow: inset 2px 0 0 var(--teal); }
-        .cmp-dest { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 600; margin: 0; }
+        .cmp-dest { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 500; margin: 0; }
         .cmp-via { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 8px; }
         .cmp-bar { height: 7px; background: var(--paper-deep); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
         .cmp-fill { height: 100%; background: var(--teal); }
@@ -1208,7 +1226,7 @@ export default function RemittanceLedger() {
 
         .about-wrap { padding: 30px 44px 12px; max-width: 680px; }
         .about-wrap h2 {
-          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 600;
+          font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 500;
           margin: 26px 0 8px;
         }
         .about-wrap h2:first-of-type { margin-top: 4px; }
@@ -1227,6 +1245,29 @@ export default function RemittanceLedger() {
           border-left: 2px solid var(--rule); padding-left: 14px; margin-bottom: 22px !important;
         }
         @media (max-width: 760px) { .about-wrap { padding: 22px 20px 10px; } }
+
+        .hero {
+          border: 1px solid var(--teal); border-left: 4px solid var(--teal);
+          background: var(--good-bg); padding: 20px 22px; margin: 0 0 6px;
+          display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center;
+        }
+        .hero-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--teal); margin: 0 0 5px; }
+        .hero-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 26px; font-weight: 400;
+          margin: 0; line-height: 1.15; }
+        .hero-note { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          margin: 6px 0 0; line-height: 1.55; }
+        .hero-amt { font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500;
+          margin: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+        .hero-lost { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          margin: 3px 0 0; text-align: right; }
+        .runners-label { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em;
+          text-transform: uppercase; color: var(--ink-light); margin: 18px 0 2px; }
+        @media (max-width: 760px) {
+          .hero { grid-template-columns: 1fr; gap: 10px; padding: 16px; }
+          .hero-amt, .hero-lost { text-align: left; }
+          .hero-name { font-size: 22px; } .hero-amt { font-size: 26px; } .dest-select { font-size: 19px; }
+        }
       `}</style>
 
       <div className="ledger-header">
@@ -1261,7 +1302,7 @@ export default function RemittanceLedger() {
       {corridor === 'c1' && (<>
       <div className="ledger-body">
         <div className="corridor-note">
-          <strong>Sending from outside the US?</strong> Currently only US → Uganda. Uganda → US is next, and UK/UAE/other corridors are on the radar based on early traffic. <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">Let me know your corridor</a> — it shapes what I build next.
+          <strong>Sending from outside the US?</strong> Currently only US → Uganda. Uganda → US is next, and UK/UAE/other corridors are on the radar based on early traffic. <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">Let me know your corridor</a>. It shapes what I build next.
         </div>
 
         <div className="method-row" style={{ marginTop: '18px', marginBottom: '4px' }}>
@@ -1376,9 +1417,8 @@ export default function RemittanceLedger() {
             </button>
             <span>{cashOut ? 'showing what lands in hand' : 'showing what lands in the wallet'}</span>
             <p className="cashout-hint">
-              Withdrawing mobile money as cash costs a 0.5% levy plus a tiered agent fee.
-              Spending straight from the wallet — school fees, merchants, airtime, sending
-              onward — costs nothing extra. Agent tiers are approximate and vary by network.
+              Cashing out mobile money costs a 0.5% levy plus an agent fee. Spending from the wallet
+              costs nothing. Agent fees are approximate and vary by network.
             </p>
           </div>
         )}
@@ -1389,15 +1429,73 @@ export default function RemittanceLedger() {
       <div className="perforation" />
 
       <div className="rows-wrap">
-        {rows.map((r, i) => (
+        {(() => {
+          const win = rows.find(r => r.id === bestId && r.available);
+          if (!win) return null;
+          const provUrl = win.url || null;
+          return (
+            <div className="hero">
+              <div>
+                <p className="hero-tag">{mode === 'send' ? 'Most arrives' : 'Cheapest to send'}</p>
+                <p className="hero-name">{win.name}</p>
+                <p className="hero-note">
+                  {win.speed}
+                  {win.fxMarkupByMethod && <><br /><span style={{ color: 'var(--stamp)' }}>
+                    Rate changes with payout method: {Object.entries(win.fxMarkupByMethod).map(([k, v]) => `${k} ${v}%`).join(', ')}
+                  </span></>}
+                </p>
+                {provUrl && (
+                  <p style={{ margin: '9px 0 0' }}>
+                    <a className="row-action" href={provUrl} target="_blank" rel="noopener noreferrer">Open {win.name} →</a>
+                    {isAffiliate(win.name) && <span className="aff-tag">paid link</span>}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="hero-amt">
+                  {mode === 'send' ? fmtUGX(win.recipientUGX) : fmtUSD(win.usdNeeded)}
+                </p>
+                <p className="hero-lost">
+                  {(mode === 'send' ? win.percentLost : win.percentLostReceive).toFixed(1)}% below mid-market
+                  {cashOut && method === 'mobile' && mode === 'send' && win.cashOutFee > 0 &&
+                    <><br />{'\u2212'}{fmtUGX(win.cashOutFee)} to cash out</>}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+        {rows.filter(r => !(r.id === bestId && r.available)).length > 0 && (
+          <p className="runners-label">Other providers</p>
+        )}
+
+        {rows.filter(r => !(r.id === bestId && r.available)).map((r, i) => (
           <div
             key={r.id}
-            className={'ledger-row' + (!r.available ? ' unavailable' : '') + (r.id === bestId ? ' winner' : '')}
+            className={'ledger-row' + (!r.available ? ' unavailable' : '')}
           >
-            <span className="row-index">{String(i + 1).padStart(2, '0')}</span>
+            <span className="row-index">{String(i + 2).padStart(2, '0')}</span>
             <div className="row-name-wrap">
               <p className="row-name">{r.name}</p>
-              <p className="row-meta">{r.speed} · rates checked {formatUpdated(r.lastUpdated)}</p>
+              <p className="row-meta">
+                {r.speed} · checked {formatUpdated(r.lastUpdated)}
+                {r.fxMarkupByMethod && (
+                  <> · <span style={{ color: 'var(--stamp)' }}>
+                    rate varies by payout method ({Object.entries(r.fxMarkupByMethod)
+                      .map(([k, v]) => `${k} ${v}%`).join(', ')})
+                  </span></>
+                )}
+                {(() => {
+                  const id = r.id === 'eversend' ? 'eversend-in' : r.id;
+                  const now = latestReading(id), before = previousReading(id);
+                  if (!now || !before || typeof now.fxMarkup !== 'number' || typeof before.fxMarkup !== 'number') return null;
+                  const d = now.fxMarkup - before.fxMarkup;
+                  if (Math.abs(d) < 0.05) return <> · unchanged</>;
+                  return <> · <span style={{ color: d > 0 ? 'var(--stamp)' : '#3E7A3E' }}>
+                    {d > 0 ? 'worse' : 'better'} by {Math.abs(d).toFixed(2)} pts since {formatUpdated(before.date)}
+                  </span></>;
+                })()}
+              </p>
             </div>
             {r.available ? (
               <>
@@ -1419,7 +1517,6 @@ export default function RemittanceLedger() {
                 Not offered for {METHODS.find(m => m.key === method).label.toLowerCase()}
               </span>
             )}
-            {r.id === bestId && r.available && <span className="stamp">Best estimate</span>}
           </div>
         ))}
       </div>
@@ -1428,12 +1525,12 @@ export default function RemittanceLedger() {
       {corridor === 'c2' && (
         <div className="research-wrap">
           <p className="research-headline">
-            Almost every way to send money from Uganda to the USA ends at a physical counter. Readers helped us find two digital doors.
+            Most ways to send money out of Uganda end at a counter. Readers found two that don't.
           </p>
           <p className="research-sub">
-            The telcos omit or haven't switched on the US. Ria blocks Ugandan signups. The bank's "international" rail is a WU counter.
-            The two apps that work — Chipper Cash and Eversend — were both pointed out by readers after we published; nobody we asked in Kampala had named either.
-            Field-verified in Kampala, July 2026.
+            The telcos either skip the US or haven't switched it on. Ria blocks Ugandan signups. DTB's
+            "international transfer" is a Western Union counter. Chipper and Eversend both work from the phone,
+            and both were named by readers after this was published.
           </p>
 
           <div className="dest-row">
@@ -1476,8 +1573,8 @@ export default function RemittanceLedger() {
 
             {destInfo.mapped && <p className="research-sub" style={{ margin: '0 0 10px' }}>
               {funding === 'mobile'
-                ? 'Instant, but loading a wallet from MTN or Airtel carries a deposit fee — Chipper charges 2.5%, Eversend a flat 37,103 UGX plus 0.49%. Counters take cash, so they are unaffected.'
-                : 'Bank deposits carry no platform fee on either app \u2014 Chipper from Absa or Stanbic, Eversend from Stanbic \u2014 but take 1\u20132 days to clear. Counters and telco menus take cash or wallet balance directly and are unaffected.'}
+                ? 'Instant, but loading a wallet costs money: Chipper takes 2.5%, Eversend a flat 37,103 UGX plus 0.49%. Counters are unaffected.'
+                : 'Free from Absa or Stanbic on both apps, but takes 1\u20132 days to clear.'}
             </p>}
 
             {destInfo.mapped && <div className="preset-row" style={{ marginBottom: '14px' }}>
@@ -1492,20 +1589,51 @@ export default function RemittanceLedger() {
               ))}
             </div>}
 
-            {destInfo.mapped && (OUT_ROUTES[dest] || []).length > 0 ? (OUT_ROUTES[dest])
-              .map(r => {
-                const amt = Number(outUGX) || 0;
-                const fn = funding === 'bank' ? r.fundBank : r.fundMobile;
+            {destInfo.mapped && (OUT_ROUTES[dest] || []).length > 0 ? (() => {
+              const amt0 = Number(outUGX) || 0;
+              const ref0 = destMid || midRate;
+              const scored = OUT_ROUTES[dest].map(rt => {
+                const fn = funding === 'bank' ? rt.fundBank : rt.fundMobile;
                 const unverified = fn === null;
-                const fundFee = unverified ? 0 : fn(amt);
-                const usd = Math.max(amt - fundFee, 0) / r.effRate;
-                const ref = destMid || midRate;
-                const lost = amt > 0 && ref > 0 ? (1 - usd / (amt / ref)) * 100 : 0;
-                return { ...r, usd, lost, fundFee, unverified };
-              })
-              .sort((a, b) => (a.unverified === b.unverified ? b.usd - a.usd : a.unverified ? 1 : -1))
+                const fundFee = unverified ? 0 : fn(amt0);
+                const usd = Math.max(amt0 - fundFee, 0) / rt.effRate;
+                const lost = amt0 > 0 && ref0 > 0 ? (1 - usd / (amt0 / ref0)) * 100 : 0;
+                return { ...rt, usd, lost, fundFee, unverified };
+              }).sort((a, b) => (a.unverified === b.unverified ? b.usd - a.usd : a.unverified ? 1 : -1));
+              const win = scored[0];
+              const rest = scored.slice(1);
+              return (
+                <>
+                  {win && !win.unverified && (
+                    <div className="hero">
+                      <div>
+                        <p className="hero-tag">Cheapest right now</p>
+                        <p className="hero-name">{win.name}</p>
+                        <p className="hero-note">{win.note}</p>
+                        {win.action && (
+                          <p style={{ margin: '9px 0 0' }}>
+                            {win.action.ussd
+                              ? <span className="row-ussd">Dial {win.action.ussd}</span>
+                              : <>
+                                  <a className="row-action" href={win.action.href} target="_blank" rel="noopener noreferrer">Open {win.name} →</a>
+                                  {isAffiliate(win.name) && <span className="aff-tag">paid link</span>}
+                                </>}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="hero-amt">{fmtDest(win.usd, destInfo)}</p>
+                        <p className="hero-lost">
+                          {win.lost.toFixed(1)}% below mid-market
+                          {win.fundFee > 0 && <><br />{'\u2212'}{fmtUGX(win.fundFee)} to fund</>}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {rest.length > 0 && <p className="runners-label">Other routes</p>}
+                  {rest
               .map((r, i) => (
-                <div key={r.id} className={'out-row' + (i === 0 ? ' best' : '')}>
+                <div key={r.id} className="out-row">
                   <div>
                     <p className="out-name">{r.name}</p>
                     <p className="out-note">{r.note}</p>
@@ -1544,7 +1672,10 @@ export default function RemittanceLedger() {
                     )}
                   </div>
                 </div>
-              )) : (
+              ))}
+                </>
+              );
+            })() : (
               <div className="pending-card">
                 <p className="pending-title">{destInfo.name}: rails known, pricing not yet collected</p>
                 {MENU_AVAILABILITY[dest] && (
@@ -1568,16 +1699,15 @@ export default function RemittanceLedger() {
 
             {destInfo.mapped && COUNTERS_PENDING.includes(dest) && (
               <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
-                <strong style={{ color: 'var(--ink)' }}>Not yet quoted for this corridor:</strong> the Western Union
-                and MoneyGram agent counters. They are the default option most people reach for, so treat this
-                ranking as covering the app and telco routes only until those are collected.
+                <strong style={{ color: 'var(--ink)' }}>Missing:</strong> Western Union and MoneyGram counter
+                quotes for this corridor. Apps and telco routes only for now.
                 {dest === 'UK' && ' The GBP mid-market rate also moved about 3% across sources on the day these were checked, so the UK percentages carry a wider error bar than the rest of the map.'}
                 {dest === 'EU' && ' MTN quotes this corridor through Thunes and warns the markup can reach 5% on volatile days, so treat the EU figures as a snapshot of a moving number rather than a standing rate.'}
               </p>
             )}
 
             {destInfo.mapped && <p className="research-sub" style={{ marginTop: '10px', marginBottom: 0 }}>
-              Rates verified by hand in Kampala, {dest === 'US' ? 'July' : 'August'} 2026 — fees and FX bundled into one effective rate,
+              Rates verified by hand in Kampala, {dest === 'US' ? 'July' : 'August'} 2026. Fees and FX are bundled into one effective rate,
               calibrated to real 2,000,000 UGX quotes. "% lost" is measured against today's live mid-market rate,
               so it moves as the shilling moves. Agent quotes vary by bureau. Confirm before you send.
             </p>}
@@ -1588,13 +1718,13 @@ export default function RemittanceLedger() {
           <div className="rail-row">
             <p className="rail-name">MTN MoMo</p>
             <span className="rail-status st-dead">US absent</span>
-            <p className="rail-note">Outbound reaches 22 countries by bank (UK, Canada, UAE, India…) plus wallets & AliPay/WeChat — the US is not on any list. Verified via *165#, Jul 2026.</p>
+            <p className="rail-note">Outbound reaches 22 countries by bank (UK, Canada, UAE, India…) plus wallets and AliPay/WeChat. The US is not on any list. Verified via *165#, Jul 2026.</p>
           </div>
 
           <div className="rail-row">
             <p className="rail-name">Airtel Money</p>
             <span className="rail-status st-dormant">Went dark</span>
-            <p className="rail-note">USA appears in the Rest-of-World menu — tapping it returns "service not live." So do England, UAE, Germany, Japan, Denmark and Ireland. But a reader reports a completed Uganda→UK transfer via Airtel Money in September 2025 at roughly 5% below mid-market — so this corridor was live and has since gone dark, rather than never having launched. Whatever switched it off is unexplained. Verified via *185#, Jul 2026.</p>
+            <p className="rail-note">USA appears in the Rest-of-World menu, but tapping it returns "service not live." So do England, UAE, Germany, Japan, Denmark and Ireland. But a reader reports a completed Uganda→UK transfer via Airtel Money in September 2025 at roughly 5% below mid-market, so this corridor was live and has since gone dark rather than never having launched. Whatever switched it off is unexplained. Verified via *185#, Jul 2026.</p>
           </div>
 
           <div className="rail-row">
@@ -1606,13 +1736,13 @@ export default function RemittanceLedger() {
           <div className="rail-row">
             <p className="rail-name">Dahabshiil</p>
             <span className="rail-status st-dead">Receive only</span>
-            <p className="rail-note">The hawala-rooted network: sender countries are Europe, UK and US only — not one African country can originate. Uganda receives (cash pickup: Kampala, Gulu, Arua; USD or UGX) while Kenya gets M-Pesa and bank options. Inbound pricing quirk: $30 fee on $500 but only $3 on the $10k max — the fee curve rewards the biggest senders. Verified in-app, Jul 2026.</p>
+            <p className="rail-note">The hawala-rooted network: sender countries are Europe, UK and US only. Not one African country can originate. Uganda receives (cash pickup: Kampala, Gulu, Arua; USD or UGX) while Kenya gets M-Pesa and bank options. Inbound pricing quirk: $30 fee on $500 but only $3 on the $10k max. The fee curve rewards the biggest senders. Verified in-app, Jul 2026.</p>
           </div>
 
           <div className="rail-row">
             <p className="rail-name">Dahabshiil</p>
             <span className="rail-status st-dead">No Uganda send</span>
-            <p className="rail-note">The East African specialist — but Uganda isn't a sender country in its app (same location wall as Ria). Inbound US→UG works: rate above mid-market (+1.5%) but ~6% fees at typical amounts, cash pickup only (Kampala, Gulu, Arua) — while Kenya gets M-Pesa and banks. Built for big transfers: $10,000 costs $3.</p>
+            <p className="rail-note">The East African specialist, but Uganda isn't a sender country in its app (same location wall as Ria). Inbound US→UG works: rate above mid-market (+1.5%) but ~6% fees at typical amounts, cash pickup only (Kampala, Gulu, Arua), while Kenya gets M-Pesa and banks. Built for big transfers: $10,000 costs $3.</p>
           </div>
 
           <div className="rail-row">
@@ -1624,19 +1754,19 @@ export default function RemittanceLedger() {
           <div className="rail-row">
             <p className="rail-name">Chipper Cash</p>
             <span className="rail-status st-works">Works · digital · best rate</span>
-            <p className="rail-note">Reader-sourced lead #2, verified in-app: UGX → USA at rate 3,793.04 (≈ 3.2% vs mid-market) — the best formal rate found. Free via Chipper tag (both need accounts), or bank account payout. Oddly, its inbound US→UG rate (3,554.80, ≈ 3.2% markup) is mediocre — Chipper is cheap out of Uganda, expensive into it. Eversend is the exact mirror.</p>
+            <p className="rail-note">Reader-sourced lead #2, verified in-app: UGX → USA at rate 3,793.04 (≈ 3.2% vs mid-market), the best formal rate found. Free via Chipper tag (both need accounts), or bank account payout. Oddly, its inbound US→UG rate (3,554.80, ≈ 3.2% markup) is mediocre. Chipper is cheap out of Uganda and expensive into it. Eversend is the exact mirror.</p>
           </div>
 
           <div className="rail-row">
             <p className="rail-name">Chipper Cash</p>
             <span className="rail-status st-works">Works · digital · cheapest</span>
-            <p className="rail-note">The second digital door — and the cheapest formal route found. UGX → US in-app: rate 3,793.04 (≈ 3.2% spread) + 0.25% fee ≈ 3.5% total. US side receives to bank, or free via Chipper tag (recipient needs the app). Reader-sourced ("works well and fast, downside is the exchange rates" — confirmed accurate), verified in-app Jul 2026. Inbound US→UG rate is weak (3,554.80) — best used outbound.</p>
+            <p className="rail-note">The second digital door, and the cheapest formal route found. UGX → US in-app: rate 3,793.04 (≈ 3.2% spread) + 0.25% fee ≈ 3.5% total. US side receives to bank, or free via Chipper tag (recipient needs the app). Reader-sourced ("works well and fast, downside is the exchange rates", confirmed accurate), verified in-app Jul 2026. Inbound US→UG rate is weak (3,554.80), so best used outbound.</p>
           </div>
 
           <div className="rail-row">
             <p className="rail-name">Eversend</p>
             <span className="rail-status st-works">Works · digital</span>
-            <p className="rail-note">The one that actually works — found via a reader comment, not by any of the people we asked in Kampala. UGX wallet → US bank account: no fee, rate 3,843.93 vs mid-market ~3,674 (≈ 4.4% spread). For 2M UGX ≈ $520 arrives — cheaper than both counters, no trip required. Load via mobile money, Stanbic, or card (3% via Flutterwave). Verified in-app, Jul 2026.</p>
+            <p className="rail-note">The one that actually works, found via a reader comment, not by any of the people we asked in Kampala. UGX wallet → US bank account: no fee, rate 3,843.93 vs mid-market ~3,674 (≈ 4.4% spread). For 2M UGX about $520 arrives, cheaper than both counters and no trip required. Load via mobile money, Stanbic, or card (3% via Flutterwave). Verified in-app, Jul 2026.</p>
           </div>
 
           <div className="rail-row">
@@ -1648,64 +1778,64 @@ export default function RemittanceLedger() {
           <div className="rail-row">
             <p className="rail-name">Bank (DTB)</p>
             <span className="rail-status st-agent">Counter only</span>
-            <p className="rail-note">The mobile banking app doesn't send internationally — DTB's international rail IS Western Union at the branch, national ID in person, both directions. The bank layer collapses into the agent layer.</p>
+            <p className="rail-note">The mobile banking app doesn't send internationally. DTB's international rail is Western Union at the branch, national ID in person, both directions. The bank layer collapses into the agent layer.</p>
           </div>
 
           <div className="rail-row">
             <p className="rail-name">Western Union · MoneyGram · Ria</p>
             <span className="rail-status st-agent">Agent only</span>
-            <p className="rail-note">Working Uganda → US transfers exist — but only by walking to a forex bureau / agent with cash and national ID, plus stating purpose & source of funds. US payout: cash pickup or bank deposit.</p>
+            <p className="rail-note">Working Uganda → US transfers exist, but only by walking to a forex bureau / agent with cash and national ID, plus stating purpose & source of funds. US payout: cash pickup or bank deposit.</p>
           </div>
 
           <p className="research-section-title">Real quotes · 2,000,000 UGX to the US · Kampala agent desk, Jul 2026</p>
 
           <div className="quote-card">
-            <p className="quote-title">MoneyGram — $515 arrives</p>
+            <p className="quote-title">MoneyGram: $515 arrives</p>
             <p className="quote-line">Fee 19,773 UGX · rate 3,846 · <span className="quote-loss">≈ 5.4% lost</span> vs mid-market (~$544 at 3,674)</p>
           </div>
           <div className="quote-card">
-            <p className="quote-title">Western Union — $510 arrives</p>
+            <p className="quote-title">Western Union: $510 arrives</p>
             <p className="quote-line">Fee 22,738 UGX · rate 3,759 · <span className="quote-loss">≈ 6.3% lost</span> vs mid-market</p>
           </div>
 
           <div className="quote-card">
-            <p className="quote-title">Chipper Cash (app) — ≈ $527 arrives · fully digital, best formal rate</p>
-            <p className="quote-line">UGX → US: rate 3,793.04, free via Chipper tag · <span className="quote-loss">≈ 3.2% lost</span> vs mid-market — cheapest formal route found. Reader-sourced, verified in-app.</p>
+            <p className="quote-title">Chipper Cash (app): about $527 arrives · fully digital, best formal rate</p>
+            <p className="quote-line">UGX → US: rate 3,793.04, free via Chipper tag · <span className="quote-loss">≈ 3.2% lost</span> vs mid-market. Cheapest formal route found. Reader-sourced, verified in-app.</p>
           </div>
 
           <div className="quote-card">
-            <p className="quote-title">Chipper Cash (app) — ≈ $526 arrives · cheapest formal route</p>
-            <p className="quote-line">UGX → US in-app: rate 3,793.04 + 0.25% fee · <span className="quote-loss">≈ 3.5% lost</span> vs mid-market — fully digital, reader-sourced, verified in-app.</p>
+            <p className="quote-title">Chipper Cash (app): about $526 arrives · cheapest formal route</p>
+            <p className="quote-line">UGX → US in-app: rate 3,793.04 + 0.25% fee · <span className="quote-loss">≈ 3.5% lost</span> vs mid-market. Fully digital, reader-sourced, verified in-app.</p>
           </div>
 
           <div className="quote-card">
-            <p className="quote-title">Eversend (app) — ≈ $520 arrives · fully digital</p>
-            <p className="quote-line">UGX wallet → US bank: no fee, rate 3,843.93 · <span className="quote-loss">≈ 4.4% lost</span> vs mid-market — beats both counters, no trip. Reader-sourced, then verified in-app.</p>
+            <p className="quote-title">Eversend (app): about $520 arrives · fully digital</p>
+            <p className="quote-line">UGX wallet → US bank: no fee, rate 3,843.93 · <span className="quote-loss">≈ 4.4% lost</span> vs mid-market. Beats both counters, no trip. Reader-sourced, then verified in-app.</p>
           </div>
 
           <div className="quote-card" style={{ background: 'var(--paper-deep)' }}>
-            <p className="quote-title">The invisible route: P2P crypto — ≈ 2.5% spread</p>
-            <p className="quote-line">Binance P2P order book (Jul 23): Ugandans buying USDT pay 3,764–3,774 UGX/$ vs mid-market ~3,674 — <span className="quote-loss">≈ 2.5% to exit UGX</span>, funded by the same MTN/Airtel wallets that can't send to the US directly. Roughly half the cost of the counters. Nobody we asked in Kampala mentioned it. (Documented as what exists, not a recommendation — P2P carries scam risk and Uganda's crypto rules are ambiguous.)</p>
+            <p className="quote-title">The invisible route: P2P crypto, about 2.5% spread</p>
+            <p className="quote-line">Binance P2P order book (Jul 23): Ugandans buying USDT pay 3,764–3,774 UGX/$ vs mid-market ~3,674. <span className="quote-loss">≈ 2.5% to exit UGX</span>, funded by the same MTN/Airtel wallets that can't send to the US directly. Roughly half the cost of the counters. Nobody we asked in Kampala mentioned it. (Documented as what exists, not a recommendation. P2P carries scam risk and Uganda's crypto rules are ambiguous.)</p>
           </div>
 
           <p className="research-sub" style={{ marginTop: '16px' }}>
             For comparison: sending the other direction (US → Uganda) costs ~1–1.5% with the best apps.
-            Sending out of Uganda through the counters costs 4–5× more — and requires a physical trip.
-            Every formal route we tested — the telcos, the bank, the app — ends at the same place: a counter, a national ID, and 5–6%.
+            Sending out of Uganda through the counters costs 4–5× more, and requires a physical trip.
+            Every formal route we tested, the telcos and the bank and the app, ends at the same place: a counter, a national ID, and 5–6%.
           </p>
 
           <p className="research-section-title">Notes & caveats</p>
           <p className="research-sub">
-            Ria runs ~280 pickup/partner locations (mostly Kampala) but its app blocks Ugandan registration — outbound is agent-only.
-            Asked around Kampala, everyone names the same three: WU, MoneyGram, slow bank transfers — nobody names Wendi or P2P.
-            Agent quotes are point-in-time and vary by bureau — a snapshot, not live pricing. Field research, Kampala, Jul 2026.
+            Ria runs ~280 pickup/partner locations (mostly Kampala) but its app blocks Ugandan registration, so outbound is agent-only.
+            Asked around Kampala, everyone names the same three: WU, MoneyGram, slow bank transfers. Nobody names Wendi or P2P.
+            Agent quotes are point-in-time and vary by bureau. A snapshot, not live pricing. Field research, Kampala, Jul 2026.
           </p>
 
           <p className="research-sub">
             <strong style={{ color: 'var(--ink)' }}>In Uganda? Help map this.</strong> Got a quote from your own bureau or bank?{' '}
             <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>
               Send it in
-            </a> — every real quote makes the map sharper.
+            </a>. Every real quote makes the map sharper.
           </p>
         </div>
       )}
@@ -1716,8 +1846,8 @@ export default function RemittanceLedger() {
             The same 2 million shillings buys very different amounts depending on where it lands.
           </p>
           <p className="research-sub">
-            Best available route per corridor, hand-verified in Kampala. Kenya costs roughly a third of what
-            Britain does for an identical transfer — the destination sets the price far more than the provider does.
+            Cheapest route per corridor, checked by hand in Kampala. Kenya costs about a third of what Britain
+            does for the same money.
           </p>
 
           {(() => {
@@ -1779,9 +1909,8 @@ export default function RemittanceLedger() {
           ))}
 
           <p className="research-sub" style={{ marginTop: '14px' }}>
-            Bars are scaled to a 10% loss. Canada is absent because MTN will not quote a rate until recipient
-            bank details are entered — you cannot price that corridor before committing to it. Agent counter
-            quotes are still missing outside the US corridor, so these are the app and telco routes only.
+            Bars are scaled to a 10% loss. Canada is missing because MTN won't quote a rate until you enter
+            recipient bank details. Counter quotes are still pending for Kenya and Europe.
           </p>
         </div>
       )}
@@ -1789,86 +1918,68 @@ export default function RemittanceLedger() {
       {corridor === 'about' && (
         <div className="about-wrap">
           <p className="about-lede">
-            My mum is in Kampala. I am usually in the US. For years money moved between us and
-            neither of us knew what we were losing to get it there. This map is the answer to that.
+            My mum is in Kampala. I'm usually in the US. For years money moved between us and
+            neither of us knew what it cost.
           </p>
 
           <h2>What this is</h2>
           <p>
-            A free comparison of what money actually costs to move between Uganda and five other
-            places. Not the advertised fee \u2014 the amount that lands in someone's hands after the
-            fee, the exchange-rate markup, the cost of loading a wallet, and the cost of taking
-            it out again. Those four things are usually quoted separately, or not at all.
+            A free comparison of what it costs to move money between Uganda and five other places.
+            Not the advertised fee. What actually lands, after the fee, the exchange rate markup,
+            the cost of loading a wallet and the cost of taking cash out.
           </p>
 
-          <h2>How the rates are collected</h2>
+          <h2>Where the rates come from</h2>
           <p>
             By hand, in Kampala. I walk into forex bureaus and ask for a quote on 2,000,000
-            shillings. I dial *165# and *185# and step through the menus. I install the apps,
-            register, and take the numbers off the confirmation screen before sending. Where I
-            have sent money myself, I have used my own.
+            shillings. I dial *165# and *185# and go through the menus. I install the apps and read
+            the numbers off the confirmation screen. Where I've sent money, it was my own.
           </p>
           <p>
-            Nothing here is scraped from a marketing page, because marketing pages leave out the
-            part that costs you money. Western Union quoting above mid-market, Remitly's rate
-            dropping after your first $500, Chipper charging 2.5% just to load the wallet, MTN
-            refusing to show a rate until the funds are already in your account \u2014 none of that
-            appears anywhere except at the counter or inside the app.
+            Nothing is scraped from a marketing page. Those leave out the part that costs you money:
+            Western Union quoting above mid-market, Remitly's rate dropping after your first $500,
+            Chipper charging 2.5% just to load a wallet, MTN not showing a rate until your money is
+            already sitting in it.
           </p>
 
-          <h2>How the numbers are calculated</h2>
+          <h2>How the numbers work</h2>
           <p>
-            Each route is reduced to one effective rate: the shillings you surrender per unit of
-            currency delivered, with every fee folded in. That figure is compared against the live
-            mid-market rate, fetched fresh each time the page loads. The difference is what you
-            lose. Because the reference rate is live and the quotes are dated, the percentages
-            shift slightly as currencies move \u2014 which is honest, and shows you when a snapshot
-            is going stale.
+            Each route is reduced to one effective rate: shillings you give up per unit of currency
+            delivered, fees included. That gets compared against the live mid-market rate. The
+            difference is what you lose.
           </p>
           <p className="small">
-            Every corridor carries the date it was last checked. Past 35 days the page says so.
-            Past 60 it tells you not to trust the numbers. The map is re-verified monthly.
-          </p>
-          <p>
-            Nothing is overwritten. Every reading is kept with the date it was taken, so the record
-            grows rather than being replaced. Once a route has been checked twice, the page shows
-            which way the cost has moved. Over time that becomes something that cannot be
-            reconstructed after the fact — a running account of what these corridors actually
-            charged, month by month.
+            Every corridor shows when it was last checked. Past 35 days the page says so. Past 60 it
+            tells you not to trust it. Old readings are kept rather than replaced, so once a route
+            has been checked twice you can see which way it moved.
           </p>
 
-          <h2>How it gets corrected</h2>
+          <h2>Corrections</h2>
           <p>
-            Readers correct it, and the record is public \u2014 there is a log of every change in the
-            footer. Someone caught that Wise had supported mobile money for months while this map
-            said otherwise. Two people named apps I had missed entirely, one of which turned out
-            to be the cheapest route out of Uganda and reversed a conclusion I had already
-            published. Another reported a completed transfer on a corridor I had written off as
-            never having launched.
+            Readers correct this and the log is public. Someone caught that Wise had supported mobile
+            money for months. Two people named apps I'd missed, one of which turned out to be the
+            cheapest way out of Uganda. Another reported a completed transfer on a corridor I'd
+            written off.
           </p>
           <p>
-            If something here is wrong, tell me and it gets fixed with your name on it.{' '}
+            If something here is wrong,{' '}
             <a href="https://forms.gle/LHbTy2PEEWL2Utdc7" target="_blank" rel="noopener noreferrer">
-              Send a correction or a quote from your own bureau
-            </a>.
+              tell me
+            </a>{' '}and it gets fixed with your name on it.
           </p>
 
-          <h2>How it is funded</h2>
+          <h2>Money</h2>
           <p>
-            Three providers \u2014 Wise, Remitly and WorldRemit \u2014 run affiliate programmes, and links
-            to them are marked <em>paid link</em> wherever they appear. Everything else earns
-            nothing, including every route that currently ranks first on this map. Rankings come
-            from the verified rates and nothing else. If a paid provider is cheapest, it is
-            because the arithmetic says so; where it is not, it sits below the ones that are.
+            Wise pays a commission on signups through this site. Those links are marked. WorldRemit
+            declined and Remitly hasn't replied. Nothing else pays anything, including every route
+            currently ranked first. Rankings come from the numbers.
           </p>
 
-          <h2>What it does not cover</h2>
+          <h2>Gaps</h2>
           <p className="small">
-            Agent counter quotes are still missing for Kenya and Europe. Canada appears in MTN's
-            menu but cannot be priced, because no rate is shown until recipient bank details are
-            entered. Rates at bureaus vary between branches, so treat counter figures as one
-            sample rather than a standing price. Everything here is an estimate to plan with \u2014
-            confirm the final number with the provider before you send.
+            No counter quotes yet for Kenya and Europe. Canada can't be priced at all, because MTN
+            won't show a rate until you enter someone's bank details. Bureau rates vary between
+            branches. Confirm the final number with the provider before you send.
           </p>
         </div>
       )}
@@ -1918,7 +2029,7 @@ export default function RemittanceLedger() {
         )}
 
         <p className="disclaimer">
-          Figures are rough planning estimates, not live quotes — actual fees, FX margins, and
+          Figures are rough planning estimates, not live quotes. Actual fees, FX margins and
           available payout methods change often and vary by amount, state, and promotions.
           Estimates assume bank-funded transfers; paying by debit or credit card usually
           costs more. Always confirm the final "recipient gets" number on the provider's own
@@ -1939,12 +2050,9 @@ export default function RemittanceLedger() {
         </div>
 
         <div className="disclosure">
-          <strong>How this is funded.</strong> Links marked <span className="aff-tag">paid link</span> earn a
-          small commission if you sign up through them \u2014 currently Wise, Remitly and WorldRemit. Nothing
-          else on this map pays anything, including every route that currently ranks first: Eversend, Chipper
-          Cash, LemFi, MTN and Airtel all earn me nothing. Rankings are computed from rates verified by hand
-          and re-checked monthly, and the affiliate list has no bearing on them. If a paid provider is the
-          cheapest it is because the numbers say so; if it is not, it is ranked below the ones that are.
+          <strong>Money.</strong> Links marked <span className="aff-tag">paid link</span> earn a commission
+          on signup. That's Wise only. WorldRemit declined and Remitly hasn't replied. Nothing else pays,
+          including every route ranked first. Rankings come from the verified numbers, re-checked monthly.
         </div>
 
         <div className="share-row">
