@@ -5,109 +5,159 @@
     "p2p": [
       {
         "date": "2026-07-27",
-        "effRate": 3770.0
+        "effRate": 3770.0,
+        "fxMarkup": 2.55,
+        "midMarketAtReading": 3674
       }
     ],
     "chipper": [
       {
         "date": "2026-07-27",
-        "effRate": 3802.5
+        "effRate": 3802.5,
+        "fxMarkup": 3.38,
+        "midMarketAtReading": 3674
       }
     ],
     "eversend": [
       {
         "date": "2026-07-27",
-        "effRate": 3843.93
+        "effRate": 3843.93,
+        "fxMarkup": 4.42,
+        "midMarketAtReading": 3674
       }
     ],
     "mg-out": [
       {
         "date": "2026-07-27",
-        "effRate": 3883.5
+        "effRate": 3883.5,
+        "fxMarkup": 5.39,
+        "midMarketAtReading": 3674
       }
     ],
     "wu-out": [
       {
         "date": "2026-07-27",
-        "effRate": 3921.6
+        "effRate": 3921.6,
+        "fxMarkup": 6.31,
+        "midMarketAtReading": 3674
       }
     ],
     "ke-ever": [
       {
         "date": "2026-08-16",
-        "effRate": 29.56
+        "effRate": 29.56,
+        "fxMarkup": 2.23,
+        "midMarketAtReading": 28.9
       }
     ],
     "ke-airtel": [
       {
         "date": "2026-08-16",
-        "effRate": 30.36
+        "effRate": 30.36,
+        "fxMarkup": 4.81,
+        "midMarketAtReading": 28.9
       }
     ],
     "ke-chip": [
       {
         "date": "2026-08-16",
-        "effRate": 30.5
+        "effRate": 30.5,
+        "fxMarkup": 5.25,
+        "midMarketAtReading": 28.9
       }
     ],
     "ke-mtn": [
       {
         "date": "2026-08-16",
-        "effRate": 30.7
+        "effRate": 30.7,
+        "fxMarkup": 5.86,
+        "midMarketAtReading": 28.9
       }
     ],
     "uk-ever": [
       {
         "date": "2026-08-17",
-        "effRate": 5250.1
+        "effRate": 5250.1,
+        "fxMarkup": 6.67,
+        "midMarketAtReading": 4900
       }
     ],
     "uk-wu": [
       {
         "date": "2026-08-18",
-        "effRate": 5363.2
+        "effRate": 5363.2,
+        "fxMarkup": 8.64,
+        "midMarketAtReading": 4900
+      },
+      {
+        "date": "2026-09-12",
+        "fxMarkup": 8.27,
+        "effRate": 5524.86,
+        "midMarketAtReading": 5067.88,
+        "note": "2,000,000 UGX delivers 362 GBP. 22,738 UGX in charges."
       }
     ],
     "uk-juba": [
       {
         "date": "2026-08-17",
-        "effRate": 5370.0
+        "effRate": 5370.0,
+        "fxMarkup": 8.75,
+        "midMarketAtReading": 4900
       }
     ],
     "uk-mg": [
       {
         "date": "2026-08-18",
-        "effRate": 5383.3
+        "effRate": 5383.3,
+        "fxMarkup": 8.98,
+        "midMarketAtReading": 4900
       }
     ],
     "ae-juba": [
       {
         "date": "2026-08-17",
-        "effRate": 1067.24
+        "effRate": 1067.24,
+        "fxMarkup": 6.26,
+        "midMarketAtReading": 1000.41
       }
     ],
     "ae-wu": [
       {
         "date": "2026-08-18",
-        "effRate": 1081.67
+        "effRate": 1081.67,
+        "fxMarkup": 7.51,
+        "midMarketAtReading": 1000.41
+      },
+      {
+        "date": "2026-09-12",
+        "fxMarkup": 7.57,
+        "effRate": 1114.21,
+        "midMarketAtReading": 1029.82,
+        "note": "2,000,000 UGX delivers 1,795 AED. 22,738 UGX in charges."
       }
     ],
     "ae-mg": [
       {
         "date": "2026-08-18",
-        "effRate": 1084.88
+        "effRate": 1084.88,
+        "fxMarkup": 7.79,
+        "midMarketAtReading": 1000.41
       }
     ],
     "eu-mtn": [
       {
         "date": "2026-08-17",
-        "effRate": 4506.9
+        "effRate": 4506.9,
+        "fxMarkup": 4.15,
+        "midMarketAtReading": 4320
       }
     ],
     "eu-ever": [
       {
         "date": "2026-08-17",
-        "effRate": 4520.1
+        "effRate": 4520.1,
+        "fxMarkup": 4.43,
+        "midMarketAtReading": 4320
       }
     ],
     "wu": [
@@ -246,10 +296,20 @@
         "fxMarkup": 1.73,
         "note": "Was slightly better than mid-market in July. Now 1.73% below it."
       }
+    ],
+    "ke-wu": [
+      {
+        "date": "2026-09-12",
+        "fxMarkup": 7.19,
+        "effRate": 31.59,
+        "midMarketAtReading": 29.32,
+        "note": "2,000,000 UGX delivers 63,308 KES. 31,678 UGX in charges."
+      }
     ]
   },
   "_midMarketAtReading": {
     "2026-07-10": 3674,
     "2026-09-08": 3782
-  }
+  },
+  "_note": "Outbound routes store a markup percentage rather than an absolute rate, so figures follow the live mid-market rate instead of freezing at the rate on the day of the reading. effRate and midMarketAtReading are kept for provenance."
 }

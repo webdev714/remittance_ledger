@@ -159,15 +159,18 @@ function previousReading(id) {
 // Movement in effective rate between the last two readings. Positive means it got worse.
 function rateMovement(id) {
   const now = latestReading(id), before = previousReading(id);
-  if (!now || !before || !now.effRate || !before.effRate) return null;
-  const pct = ((now.effRate - before.effRate) / before.effRate) * 100;
+  if (!now || !before) return null;
+  if (typeof now.fxMarkup !== 'number' || typeof before.fxMarkup !== 'number') return null;
+  const pct = now.fxMarkup - before.fxMarkup;
   if (Math.abs(pct) < 0.05) return { pct: 0, since: before.date, flat: true };
   return { pct, since: before.date, flat: false };
 }
-// Resolve a route's live rate from history, falling back to the value in the definition.
-function resolveRate(id, fallback) {
+// Resolve a route's markup from history, falling back to the value in the definition.
+// Storing a markup rather than an absolute rate means the figures track the live
+// mid-market rate instead of freezing at whatever the shilling was worth on the day.
+function resolveMarkup(id, fallback) {
   const r = latestReading(id);
-  return r && typeof r.effRate === 'number' ? r.effRate : fallback;
+  return r && typeof r.fxMarkup === 'number' ? r.fxMarkup : fallback;
 }
 
 const FRESH_DAYS = 35;
@@ -186,73 +189,76 @@ function freshness(dateStr) {
 const isAffiliate = (name) => AFFILIATE_PARTNERS.includes(name);
 
 const OUT_ROUTES_US = [
-  { id: 'p2p',      name: 'P2P crypto (USDT)', effRate: resolveRate('p2p', 3770.0),  kind: 'informal',
+  { id: 'p2p',      name: 'P2P crypto (USDT)', fxMarkup: resolveMarkup('p2p', 2.55),  kind: 'informal',
     note: 'Binance P2P · scam risk, murky rules · MoMo send charge not modelled',
     fundMobile: () => 0, fundBank: null },
-  { id: 'chipper',  name: 'Chipper Cash',      effRate: resolveRate('chipper', 3802.5),  kind: 'digital', action: { href: 'https://chippercash.com' },
+  { id: 'chipper',  name: 'Chipper Cash',      fxMarkup: resolveMarkup('chipper', 3.38),  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'In-app · US bank or free Chipper tag',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'eversend', name: 'Eversend',          effRate: resolveRate('eversend', 3843.93), kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'eversend', name: 'Eversend',          fxMarkup: resolveMarkup('eversend', 4.42), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app · US bank · no transfer fee',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'mg-out',   name: 'MoneyGram',         effRate: resolveRate('mg-out', 3883.5),  kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'mg-out',   name: 'MoneyGram',         fxMarkup: resolveMarkup('mg-out', 5.39),  kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'wu-out',   name: 'Western Union',     effRate: resolveRate('wu-out', 3921.6),  kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'wu-out',   name: 'Western Union',     fxMarkup: resolveMarkup('wu-out', 6.31),  kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk · cash in hand · national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
 
 const OUT_ROUTES_KE = [
-  { id: 'ke-ever',   name: 'Eversend',      effRate: resolveRate('ke-ever', 29.56),  kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'ke-ever',   name: 'Eversend',      fxMarkup: resolveMarkup('ke-ever', 2.23),  kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 M-Pesa or bank \u00b7 1,989 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'ke-airtel', name: 'Airtel Money',  effRate: resolveRate('ke-airtel', 30.36),  kind: 'telco', action: { ussd: '*185#' },
+  { id: 'ke-airtel', name: 'Airtel Money',  fxMarkup: resolveMarkup('ke-airtel', 4.81),  kind: 'telco', action: { ussd: '*185#' },
     note: '*185# \u00b7 Airtel Kenya or M-Pesa \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
-  { id: 'ke-chip',   name: 'Chipper Cash',  effRate: resolveRate('ke-chip', 30.50),  kind: 'digital', action: { href: 'https://chippercash.com' },
+  { id: 'ke-chip',   name: 'Chipper Cash',  fxMarkup: resolveMarkup('ke-chip', 5.25),  kind: 'digital', action: { href: 'https://chippercash.com' },
     note: 'Chipper tag only \u2014 no bank or mobile money payout to Kenya',
     fundMobile: chipperDeposit, fundBank: () => 0 },
-  { id: 'ke-mtn',    name: 'MTN MoMo',      effRate: resolveRate('ke-mtn', 30.70),  kind: 'telco', action: { ussd: '*165#' },
+  { id: 'ke-wu',     name: 'Western Union', fxMarkup: resolveMarkup('ke-wu', 7.19), kind: 'counter', action: { href: 'https://www.westernunion.com' },
+    note: 'Agent desk · cash in hand · 31,678 UGX in charges on a 2,000,000 send',
+    fundMobile: () => 0, fundBank: () => 0 },
+  { id: 'ke-mtn',    name: 'MTN MoMo',      fxMarkup: resolveMarkup('ke-mtn', 5.86),  kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Africa mobile networks \u00b7 1,000 UGX fee, rest hidden in the rate',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_UK = [
-  { id: 'uk-ever', name: 'Eversend',            effRate: resolveRate('uk-ever', 5250.1), kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'uk-ever', name: 'Eversend',            fxMarkup: resolveMarkup('uk-ever', 6.67), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer only \u00b7 14,718 UGX fee on top',
     fundMobile: eversendDeposit, fundBank: () => 0 },
-  { id: 'uk-wu',   name: 'Western Union',        effRate: resolveRate('uk-wu', 5363.2), kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'uk-wu',   name: 'Western Union',        fxMarkup: resolveMarkup('uk-wu', 8.64), kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'uk-mg',   name: 'MoneyGram',            effRate: resolveRate('uk-mg', 5383.3), kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'uk-mg',   name: 'MoneyGram',            fxMarkup: resolveMarkup('uk-mg', 8.98), kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'uk-juba', name: 'MTN via Juba Express', effRate: resolveRate('uk-juba', 5370.0), kind: 'telco', action: { ussd: '*165#' },
+  { id: 'uk-juba', name: 'MTN via Juba Express', fxMarkup: resolveMarkup('uk-juba', 8.75), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 bank transfer only',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_AE = [
-  { id: 'ae-juba', name: 'MTN via Juba Express', effRate: resolveRate('ae-juba', 1067.24), kind: 'telco', action: { ussd: '*165#' },
+  { id: 'ae-juba', name: 'MTN via Juba Express', fxMarkup: resolveMarkup('ae-juba', 6.26), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u2192 More countries \u00b7 the only quotable route found \u00b7 Airtel lists the UAE but returns "service not live"',
     fundMobile: () => 0, fundBank: null },
 ];
 
 const OUT_ROUTES_EU = [
-  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', effRate: resolveRate('eu-mtn', 4506.9), kind: 'telco', action: { ussd: '*165#' },
+  { id: 'eu-mtn',  name: 'MTN MoMo (via Thunes)', fxMarkup: resolveMarkup('eu-mtn', 4.15), kind: 'telco', action: { ussd: '*165#' },
     note: '*165# \u00b7 Euro banks \u00b7 flat 1,000 UGX network fee up to 5M \u00b7 rate only visible once the funds are in your wallet',
     fundMobile: () => 0, fundBank: null },
-  { id: 'eu-ever', name: 'Eversend',              effRate: resolveRate('eu-ever', 4520.1), kind: 'digital', action: { href: EVERSEND_URL },
+  { id: 'eu-ever', name: 'Eversend',              fxMarkup: resolveMarkup('eu-ever', 4.43), kind: 'digital', action: { href: EVERSEND_URL },
     note: 'In-app \u00b7 bank transfer \u00b7 better headline rate, but a 13,983 UGX fee on top cancels it out',
     fundMobile: eversendDeposit, fundBank: () => 0 },
 ];
 
 const OUT_ROUTES_AE_EXTRA = [
-  { id: 'ae-wu', name: 'Western Union', effRate: resolveRate('ae-wu', 1081.67), kind: 'counter', action: { href: 'https://www.westernunion.com' },
+  { id: 'ae-wu', name: 'Western Union', fxMarkup: resolveMarkup('ae-wu', 7.51), kind: 'counter', action: { href: 'https://www.westernunion.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
-  { id: 'ae-mg', name: 'MoneyGram',     effRate: resolveRate('ae-mg', 1084.88), kind: 'counter', action: { href: 'https://www.moneygram.com' },
+  { id: 'ae-mg', name: 'MoneyGram',     fxMarkup: resolveMarkup('ae-mg', 7.79), kind: 'counter', action: { href: 'https://www.moneygram.com' },
     note: 'Agent desk \u00b7 cash in hand \u00b7 national ID + purpose of funds',
     fundMobile: () => 0, fundBank: () => 0 },
 ];
@@ -476,7 +482,8 @@ export default function RemittanceLedger() {
         const scored = OUT_ROUTES[d.code].map(r => {
           const fn = funding === 'bank' ? r.fundBank : r.fundMobile;
           if (fn === null) return null;
-          const got = Math.max(amt - fn(amt), 0) / r.effRate;
+          const eff = ref / (1 - r.fxMarkup / 100);
+          const got = Math.max(amt - fn(amt), 0) / eff;
           return { name: r.name, got };
         }).filter(Boolean);
         if (!scored.length || !ref) return null;
@@ -511,8 +518,8 @@ export default function RemittanceLedger() {
           --paper: #F6F1E7;
           --paper-deep: #EFE7D8;
           --ink: #2B2620;
-          --ink-light: #8A8074;
-          --rule: #D8CDB8;
+          --ink-light: #5F5749;
+          --rule: #CFC2A9;
           --stamp: #B0392B;
           --gold: #C0902F;
           --teal: #1F3D3A;
@@ -543,7 +550,7 @@ export default function RemittanceLedger() {
         }
         .ledger-eyebrow {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           letter-spacing: 0.18em;
           text-transform: uppercase;
           color: var(--gold);
@@ -560,7 +567,7 @@ export default function RemittanceLedger() {
         }
         .ledger-sub {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 13px;
+          font-size: 15px;
           color: rgba(246,241,231,0.65);
           margin: 6px 0 0;
         }
@@ -611,7 +618,7 @@ export default function RemittanceLedger() {
         }
         .preset-btn {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           padding: 4px 10px;
           border: 1px solid var(--rule);
           border-radius: 12px;
@@ -628,7 +635,7 @@ export default function RemittanceLedger() {
 
         .rate-line {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 15px;
           color: var(--ink-light);
           margin-top: 8px;
           display: flex;
@@ -646,7 +653,7 @@ export default function RemittanceLedger() {
         }
         .rate-input {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 15px;
           width: 64px;
           border: none;
           border-bottom: 1px dotted var(--ink-light);
@@ -656,7 +663,7 @@ export default function RemittanceLedger() {
 
         .verified-line {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           color: var(--ink-light);
           margin-top: 6px;
         }
@@ -682,7 +689,7 @@ export default function RemittanceLedger() {
         }
         .method-btn {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 15px;
           letter-spacing: 0.06em;
           text-transform: uppercase;
           padding: 8px 14px;
@@ -739,7 +746,7 @@ export default function RemittanceLedger() {
         }
         .row-index {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 15px;
           color: var(--ink-light);
         }
         .row-name-wrap { min-width: 0; }
@@ -751,13 +758,13 @@ export default function RemittanceLedger() {
         }
         .row-meta {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11.5px;
+          font-size: 15px;
           color: var(--ink-light);
           margin: 2px 0 0;
-        }
+         line-height: 1.6; }
         .row-fee {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 12px;
+          font-size: 15px;
           color: var(--ink-light);
           text-align: right;
           white-space: nowrap;
@@ -780,7 +787,7 @@ export default function RemittanceLedger() {
           border: 2px solid var(--stamp);
           color: var(--stamp);
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 9px;
+          font-size: 15px;
           letter-spacing: 0.1em;
           text-transform: uppercase;
           padding: 3px 7px;
@@ -797,7 +804,7 @@ export default function RemittanceLedger() {
 
         .unavailable-tag {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           color: var(--ink-light);
           text-align: right;
         }
@@ -807,7 +814,7 @@ export default function RemittanceLedger() {
         }
         .edit-toggle {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--teal);
@@ -829,7 +836,7 @@ export default function RemittanceLedger() {
         }
         .edit-panel-title {
           font-family: 'IBM Plex Serif', Georgia, serif;
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 600;
           margin: 0 0 10px;
         }
@@ -840,20 +847,20 @@ export default function RemittanceLedger() {
           gap: 8px;
           align-items: center;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
         }
         .edit-grid-head {
           color: var(--ink-light);
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          font-size: 10px;
+          font-size: 15px;
           padding-bottom: 4px;
           border-bottom: 1px solid var(--rule);
         }
         .edit-grid input[type="number"] {
           width: 60px;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           border: 1px solid var(--rule);
           border-radius: 2px;
           padding: 3px 4px;
@@ -863,7 +870,7 @@ export default function RemittanceLedger() {
         .edit-grid .methods-cell {
           display: flex;
           gap: 8px;
-          font-size: 10px;
+          font-size: 15px;
           align-items: center;
         }
         .edit-grid .methods-cell label {
@@ -875,7 +882,7 @@ export default function RemittanceLedger() {
 
         .disclaimer {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 10.5px;
+          font-size: 15px;
           color: var(--ink-light);
           line-height: 1.6;
           margin-top: 16px;
@@ -888,7 +895,7 @@ export default function RemittanceLedger() {
           padding-top: 12px;
           border-top: 1px solid var(--rule);
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           color: var(--ink-light);
           display: flex;
           align-items: center;
@@ -915,7 +922,7 @@ export default function RemittanceLedger() {
           border: 1px dashed var(--rule);
           border-radius: 3px;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           color: var(--ink-light);
           line-height: 1.5;
         }
@@ -940,13 +947,13 @@ export default function RemittanceLedger() {
         }
         .share-label {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           color: var(--ink-light);
           letter-spacing: 0.04em;
         }
         .share-btn {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           padding: 5px 12px;
           border: 1px solid var(--rule);
           border-radius: 14px;
@@ -976,7 +983,7 @@ export default function RemittanceLedger() {
         }
         .corridor-tab {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
           letter-spacing: 0.1em;
           text-transform: uppercase;
           padding: 10px 14px 12px;
@@ -1001,7 +1008,7 @@ export default function RemittanceLedger() {
         }
         .research-sub {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11.5px;
+          font-size: 15px;
           color: var(--ink-light);
           line-height: 1.6;
           margin: 0 0 18px;
@@ -1023,15 +1030,15 @@ export default function RemittanceLedger() {
         }
         .rail-note {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 10.5px;
+          font-size: 15px;
           color: var(--ink-light);
           margin: 2px 0 0;
           width: 100%;
           line-height: 1.5;
-        }
+         line-height: 1.7; }
         .rail-status {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 9px;
+          font-size: 15px;
           letter-spacing: 0.1em;
           text-transform: uppercase;
           padding: 3px 8px;
@@ -1057,14 +1064,14 @@ export default function RemittanceLedger() {
         }
         .quote-line {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 11.5px;
+          font-size: 15px;
           line-height: 1.7;
           margin: 0;
         }
         .quote-loss { color: var(--stamp); font-weight: 600; }
         .research-section-title {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 10px;
+          font-size: 15px;
           letter-spacing: 0.14em;
           text-transform: uppercase;
           color: var(--ink-light);
@@ -1085,9 +1092,9 @@ export default function RemittanceLedger() {
         }
         .out-row.best { background: var(--good-bg); }
         .out-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 17px; font-weight: 500; margin: 0; }
-        .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 0; }
+        .out-note { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light); margin: 2px 0 0;  line-height: 1.65; }
         .out-kind {
-          font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.1em;
           text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid; white-space: nowrap;
         }
         .k-digital  { color: #2E6B2E; border-color: #2E6B2E; }
@@ -1095,7 +1102,7 @@ export default function RemittanceLedger() {
         .k-informal { color: var(--gold); border-color: var(--gold); }
         .k-telco    { color: var(--ink-light); border-color: var(--ink-light); }
         .out-usd { font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 600; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-        .out-lost { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: right; }
+        .out-lost { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light); text-align: right; }
 
         .log-panel {
           margin-top: 16px; border: 1px solid var(--rule); border-radius: 4px;
@@ -1104,32 +1111,32 @@ export default function RemittanceLedger() {
         .log-entry { padding: 10px 0; border-bottom: 1px solid var(--rule); }
         .log-entry:last-child { border-bottom: none; }
         .log-meta {
-          font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.06em;
           color: var(--ink-light); margin: 0 0 3px;
         }
         .log-who { color: var(--teal); font-weight: 500; }
-        .log-what { font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.65; margin: 0; }
+        .log-what { font-family: 'IBM Plex Mono', monospace; font-size: 15px; line-height: 1.65; margin: 0; }
 
         .cashout-row {
           display: flex; align-items: center; gap: 8px; margin-top: 12px;
-          font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light);
           flex-wrap: wrap;
         }
         .cashout-switch {
           display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
           border: 1px solid var(--rule); border-radius: 14px; padding: 4px 11px;
           background: transparent; color: var(--ink); font-family: 'IBM Plex Mono', monospace;
-          font-size: 11px;
+          font-size: 15px;
         }
         .cashout-switch.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-        .cashout-hint { font-size: 10px; line-height: 1.5; width: 100%; margin: 2px 0 0; }
+        .cashout-hint { font-size: 15px; line-height: 1.5; width: 100%; margin: 2px 0 0; }
         .row-cashout {
-          font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px;
           color: var(--stamp); margin: 2px 0 0; text-align: right;
         }
 
         .dest-row { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
-        .dest-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); }
+        .dest-label { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light); }
         .dest-select {
           font-family: 'IBM Plex Serif', Georgia, serif; font-size: 23px; font-weight: 400; color: var(--ink);
           background: transparent; border: none; border-bottom: 2px solid var(--ink);
@@ -1145,12 +1152,12 @@ export default function RemittanceLedger() {
         }
         .pending-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 16px; font-weight: 500; margin: 0 0 8px; }
         .pending-line {
-          font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.7; margin: 0 0 4px;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; line-height: 1.7; margin: 0 0 4px;
         }
         .pending-key { color: var(--ink-light); }
 
         @media (max-width: 760px) {
-          .fresh-bar { font-size: 10px; }
+          .fresh-bar { font-size: 15px; }
           .ledger-header { padding: 22px 20px 18px; }
           .ledger-title { font-size: 26px; }
           .corridor-tabs { padding: 0 20px; }
@@ -1174,12 +1181,12 @@ export default function RemittanceLedger() {
         }
         .cmp-row.best { box-shadow: inset 2px 0 0 var(--teal); }
         .cmp-dest { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 18px; font-weight: 500; margin: 0; }
-        .cmp-via { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); margin: 2px 0 8px; }
+        .cmp-via { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light); margin: 2px 0 8px;  line-height: 1.6; }
         .cmp-bar { height: 7px; background: var(--paper-deep); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
         .cmp-fill { height: 100%; background: var(--teal); }
         .cmp-fill.hi { background: var(--stamp); }
         .cmp-amt { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 600; text-align: right; margin: 0; font-variant-numeric: tabular-nums; }
-        .cmp-lost { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light); text-align: right; margin: 2px 0 0; }
+        .cmp-lost { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light); text-align: right; margin: 2px 0 0; }
         @media (max-width: 760px) {
           .cmp-wrap { padding: 20px 20px 8px; }
           .cmp-row { grid-template-columns: minmax(0,1fr) auto; gap: 12px; padding: 14px 4px; }
@@ -1187,24 +1194,24 @@ export default function RemittanceLedger() {
         }
 
         .row-action {
-          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.04em;
           color: var(--teal); text-decoration: none; border-bottom: 1px dotted var(--teal);
           padding-bottom: 1px; white-space: nowrap;
         }
         .row-action:hover { color: var(--stamp); border-bottom-color: var(--stamp); }
         .row-ussd {
-          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.04em;
           color: var(--ink); background: var(--paper-deep); border: 1px solid var(--rule);
           border-radius: 2px; padding: 1px 6px; white-space: nowrap;
         }
 
         .aff-tag {
-          font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.1em;
           text-transform: uppercase; color: var(--ink-light); border: 1px solid var(--rule);
           border-radius: 2px; padding: 1px 5px; margin-left: 6px; white-space: nowrap;
         }
         .disclosure {
-          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.65;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; line-height: 1.65;
           color: var(--ink-light); border: 1px solid var(--rule); border-radius: 3px;
           background: var(--paper-deep); padding: 11px 13px; margin-top: 14px;
         }
@@ -1212,7 +1219,7 @@ export default function RemittanceLedger() {
 
         .fresh-bar {
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-          font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.6;
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; line-height: 1.6;
           border: 1px solid var(--rule); border-radius: 3px;
           padding: 8px 11px; margin: 0 0 16px;
         }
@@ -1231,11 +1238,11 @@ export default function RemittanceLedger() {
         }
         .about-wrap h2:first-of-type { margin-top: 4px; }
         .about-wrap p {
-          font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px;
+          font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 16px;
           line-height: 1.75; margin: 0 0 12px; color: var(--ink);
         }
         .about-wrap p.small {
-          font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+          font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light);
           line-height: 1.7;
         }
         .about-wrap a { color: var(--teal); }
@@ -1251,17 +1258,17 @@ export default function RemittanceLedger() {
           background: var(--good-bg); padding: 20px 22px; margin: 0 0 6px;
           display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center;
         }
-        .hero-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+        .hero-tag { font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.16em;
           text-transform: uppercase; color: var(--teal); margin: 0 0 5px; }
         .hero-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 26px; font-weight: 400;
           margin: 0; line-height: 1.15; }
-        .hero-note { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
-          margin: 6px 0 0; line-height: 1.55; }
+        .hero-note { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light);
+          margin: 6px 0 0; line-height: 1.55;  line-height: 1.7; }
         .hero-amt { font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500;
           margin: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-        .hero-lost { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-light);
+        .hero-lost { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink-light);
           margin: 3px 0 0; text-align: right; }
-        .runners-label { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em;
+        .runners-label { font-family: 'IBM Plex Mono', monospace; font-size: 15px; letter-spacing: 0.14em;
           text-transform: uppercase; color: var(--ink-light); margin: 18px 0 2px; }
         @media (max-width: 760px) {
           .hero { grid-template-columns: 1fr; gap: 10px; padding: 16px; }
@@ -1596,7 +1603,8 @@ export default function RemittanceLedger() {
                 const fn = funding === 'bank' ? rt.fundBank : rt.fundMobile;
                 const unverified = fn === null;
                 const fundFee = unverified ? 0 : fn(amt0);
-                const usd = Math.max(amt0 - fundFee, 0) / rt.effRate;
+                const eff = ref0 / (1 - rt.fxMarkup / 100);
+                const usd = Math.max(amt0 - fundFee, 0) / eff;
                 const lost = amt0 > 0 && ref0 > 0 ? (1 - usd / (amt0 / ref0)) * 100 : 0;
                 return { ...rt, usd, lost, fundFee, unverified };
               }).sort((a, b) => (a.unverified === b.unverified ? b.usd - a.usd : a.unverified ? 1 : -1));
@@ -1665,7 +1673,7 @@ export default function RemittanceLedger() {
                           const cls = mv.flat ? 'move-flat' : mv.pct > 0 ? 'move-worse' : 'move-better';
                           const txt = mv.flat
                             ? 'unchanged since ' + formatUpdated(mv.since)
-                            : (mv.pct > 0 ? '\u2191 ' : '\u2193 ') + Math.abs(mv.pct).toFixed(1) + '% since ' + formatUpdated(mv.since);
+                            : (mv.pct > 0 ? 'worse by ' : 'better by ') + Math.abs(mv.pct).toFixed(2) + ' pts since ' + formatUpdated(mv.since);
                           return <p className={'rate-move ' + cls}>{txt}</p>;
                         })()}
                       </>
@@ -2088,7 +2096,7 @@ export default function RemittanceLedger() {
 function FragmentRow({ p, update }) {
   return (
     <>
-      <span style={{ fontFamily: "'IBM Plex Serif', Georgia, serif", fontSize: '12px', fontWeight: 600 }}>{p.name}</span>
+      <span style={{ fontFamily: "'IBM Plex Serif', Georgia, serif", fontSize: '15px', fontWeight: 600 }}>{p.name}</span>
       <input
         type="number"
         step="0.01"
@@ -2124,7 +2132,7 @@ function FragmentRow({ p, update }) {
         value={p.lastUpdated}
         max={TODAY}
         onChange={e => update(p.id, 'lastUpdated', e.target.value)}
-        style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', border: '1px solid var(--rule)', borderRadius: '2px', padding: '3px 4px', background: 'var(--paper)', color: 'var(--ink)' }}
+        style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '15px', border: '1px solid var(--rule)', borderRadius: '2px', padding: '3px 4px', background: 'var(--paper)', color: 'var(--ink)' }}
       />
     </>
   );
